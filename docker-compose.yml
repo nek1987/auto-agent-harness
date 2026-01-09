@@ -1,7 +1,28 @@
 # ============================================================================
 # Auto-Agent-Harness Docker Compose
 # ============================================================================
-# Production deployment configuration
+#
+# Production deployment configuration with dual authentication support.
+#
+# AUTHENTICATION MODES:
+# ====================
+#
+# Mode 1: API Key (Default)
+#   Set ANTHROPIC_API_KEY in .env file
+#   docker-compose up -d
+#
+# Mode 2: OAuth Subscription (Local)
+#   Run: ./scripts/setup-docker-auth.sh --oauth-mount
+#   docker-compose up -d
+#
+# Mode 3: OAuth Subscription (Remote)
+#   Run: ./scripts/setup-docker-auth.sh --oauth-extract
+#   Copy project to server, then: docker-compose up -d
+#
+# Quick Setup:
+#   ./scripts/setup-docker-auth.sh --interactive
+#
+# ============================================================================
 
 services:
   auto-agent-harness:
@@ -15,10 +36,15 @@ services:
       - "${PORT:-8888}:8888"
 
     environment:
-      # Authentication
+      # Application Authentication (for UI login)
       - AUTH_ENABLED=${AUTH_ENABLED:-true}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-admin}
+
+      # Claude API Authentication (choose one method)
+      # Method 1: API Key (pay-per-token)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Method 2: OAuth - mount ~/.claude volume (see below)
 
       # Path security
       - ALLOWED_ROOT_DIRECTORY=/workspace
@@ -39,8 +65,13 @@ services:
       # Workspace for projects
       - ${WORKSPACE_DIR:-./workspace}:/workspace
 
-      # Optional: Claude CLI credentials (if using local auth)
-      # - ~/.claude:/home/autocoder/.claude:ro
+      # OAuth Credentials (uncomment ONE of these for OAuth mode):
+      #
+      # Option A: Mount host credentials (local Docker)
+      # - ${HOME}/.claude:/home/autocoder/.claude:ro
+      #
+      # Option B: Mount extracted credentials (remote server)
+      # - ./.docker-credentials:/home/autocoder/.claude:ro
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8888/api/health"]
@@ -72,20 +103,30 @@ volumes:
 # Usage Examples
 # ============================================================================
 #
-# 1. Start the service:
-#    docker-compose up -d
+# QUICK START (Interactive):
+#   ./scripts/setup-docker-auth.sh
 #
-# 2. Start with custom workspace directory:
-#    WORKSPACE_DIR=/path/to/projects docker-compose up -d
+# API KEY MODE:
+#   echo "ANTHROPIC_API_KEY=sk-ant-xxx" >> .env
+#   echo "JWT_SECRET_KEY=$(python3 -c 'import secrets;print(secrets.token_hex(32))')" >> .env
+#   docker-compose up -d
 #
-# 3. View logs:
-#    docker-compose logs -f
+# OAUTH MODE (Local):
+#   ./scripts/setup-docker-auth.sh --oauth-mount
+#   docker-compose up -d
 #
-# 4. Stop the service:
-#    docker-compose down
+# OAUTH MODE (Remote Server):
+#   ./scripts/setup-docker-auth.sh --oauth-extract
+#   # Copy project to server
+#   docker-compose up -d
 #
-# 5. Rebuild after code changes:
-#    docker-compose build --no-cache
-#    docker-compose up -d
+# COMMON COMMANDS:
+#   docker-compose up -d              # Start
+#   docker-compose logs -f            # View logs
+#   docker-compose down               # Stop
+#   docker-compose build --no-cache   # Rebuild
+#
+# CUSTOM WORKSPACE:
+#   WORKSPACE_DIR=/path/to/projects docker-compose up -d
 #
 # ============================================================================

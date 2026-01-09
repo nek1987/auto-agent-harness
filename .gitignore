@@ -147,6 +147,7 @@ registry.db
 # ===================
 users.json
 settings.json
+.docker-credentials/
 
 # ===================
 # Misc
