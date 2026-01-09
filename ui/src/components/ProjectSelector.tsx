@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { ChevronDown, Plus, FolderOpen, Loader2 } from 'lucide-react'
+import { ChevronDown, Plus, FolderOpen, Loader2, Download } from 'lucide-react'
 import type { ProjectSummary } from '../lib/types'
 import { NewProjectModal } from './NewProjectModal'
+import { ImportProjectModal } from './ImportProjectModal'
 
 interface ProjectSelectorProps {
   projects: ProjectSummary[]
@@ -18,6 +19,7 @@ export function ProjectSelector({
 }: ProjectSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [showNewProjectModal, setShowNewProjectModal] = useState(false)
+  const [showImportProjectModal, setShowImportProjectModal] = useState(false)
 
   const handleProjectCreated = (projectName: string) => {
     onSelectProject(projectName)
@@ -114,6 +116,18 @@ export function ProjectSelector({
               <Plus size={16} />
               New Project
             </button>
+
+            {/* Import Existing */}
+            <button
+              onClick={() => {
+                setShowImportProjectModal(true)
+                setIsOpen(false)
+              }}
+              className="w-full neo-dropdown-item flex items-center gap-2"
+            >
+              <Download size={16} />
+              Import Existing
+            </button>
           </div>
         </>
       )}
@@ -122,6 +136,13 @@ export function ProjectSelector({
       <NewProjectModal
         isOpen={showNewProjectModal}
         onClose={() => setShowNewProjectModal(false)}
+        onProjectCreated={handleProjectCreated}
+      />
+
+      {/* Import Project Modal */}
+      <ImportProjectModal
+        isOpen={showImportProjectModal}
+        onClose={() => setShowImportProjectModal(false)}
         onProjectCreated={handleProjectCreated}
       />
     </div>

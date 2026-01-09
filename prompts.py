@@ -12,6 +12,11 @@ Multi-spec support:
 - Projects can have multiple app specs (main, frontend, backend, etc.)
 - Specs are tracked in {project_dir}/prompts/.spec_manifest.json
 - Features are tagged with source_spec to track their origin
+
+Skills integration (SDK 0.1.19):
+- Skills from .claude/skills/ are loaded and injected into prompts
+- {{SKILLS_CONTEXT}} placeholder is replaced with relevant skills
+- Skills are selected based on agent mode (analysis, coding, frontend, etc.)
 """
 
 import json
@@ -20,8 +25,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from lib.skills_loader import SkillsLoader, get_skills_context
+
 # Base templates location (generic templates)
 TEMPLATES_DIR = Path(__file__).parent / ".claude" / "templates"
+
+# Harness directory (for loading skills from harness rather than project)
+HARNESS_DIR = Path(__file__).parent
 
 
 def get_project_prompts_dir(project_dir: Path) -> Path:
@@ -29,62 +39,112 @@ def get_project_prompts_dir(project_dir: Path) -> Path:
     return project_dir / "prompts"
 
 
-def load_prompt(name: str, project_dir: Path | None = None) -> str:
+def load_prompt(name: str, project_dir: Path | None = None, mode: str | None = None) -> str:
     """
-    Load a prompt template with fallback chain.
+    Load a prompt template with fallback chain and optional skills injection.
 
     Fallback order:
     1. Project-specific: {project_dir}/prompts/{name}.md
     2. Base template: .claude/templates/{name}.template.md
 
+    If mode is provided, skills context will be injected:
+    - {{SKILLS_CONTEXT}} placeholder is replaced with relevant skills
+    - If no placeholder, skills are appended to the prompt
+
     Args:
         name: The prompt name (without extension), e.g., "initializer_prompt"
         project_dir: Optional project directory for project-specific prompts
+        mode: Optional agent mode for skills injection (analysis, coding, frontend, etc.)
 
     Returns:
-        The prompt content as a string
+        The prompt content as a string, with skills injected if mode is provided
 
     Raises:
         FileNotFoundError: If prompt not found in any location
     """
+    content = None
+
     # 1. Try project-specific first
     if project_dir:
         project_prompts = get_project_prompts_dir(project_dir)
         project_path = project_prompts / f"{name}.md"
         if project_path.exists():
             try:
-                return project_path.read_text(encoding="utf-8")
+                content = project_path.read_text(encoding="utf-8")
             except (OSError, PermissionError) as e:
                 print(f"Warning: Could not read {project_path}: {e}")
 
-    # 2. Try base template
-    template_path = TEMPLATES_DIR / f"{name}.template.md"
-    if template_path.exists():
-        try:
-            return template_path.read_text(encoding="utf-8")
-        except (OSError, PermissionError) as e:
-            print(f"Warning: Could not read {template_path}: {e}")
+    # 2. Try base template if not found
+    if content is None:
+        template_path = TEMPLATES_DIR / f"{name}.template.md"
+        if template_path.exists():
+            try:
+                content = template_path.read_text(encoding="utf-8")
+            except (OSError, PermissionError) as e:
+                print(f"Warning: Could not read {template_path}: {e}")
 
-    raise FileNotFoundError(
-        f"Prompt '{name}' not found in:\n"
-        f"  - Project: {project_dir / 'prompts' if project_dir else 'N/A'}\n"
-        f"  - Templates: {TEMPLATES_DIR}"
-    )
+    if content is None:
+        raise FileNotFoundError(
+            f"Prompt '{name}' not found in:\n"
+            f"  - Project: {project_dir / 'prompts' if project_dir else 'N/A'}\n"
+            f"  - Templates: {TEMPLATES_DIR}"
+        )
+
+    # Inject skills context if mode is provided
+    if mode:
+        content = inject_skills_context(content, mode)
+
+    return content
+
+
+def inject_skills_context(content: str, mode: str) -> str:
+    """
+    Inject skills context into a prompt.
+
+    Loads skills from the harness .claude/skills/ directory and injects
+    them into the prompt content.
+
+    Args:
+        content: The prompt content
+        mode: Agent mode for selecting relevant skills
+
+    Returns:
+        Prompt with skills context injected
+    """
+    # Load skills from harness directory (not project directory)
+    # Skills are shared across all projects
+    skills_context = get_skills_context(HARNESS_DIR, mode)
+
+    if not skills_context:
+        # No skills found for this mode, remove placeholder if present
+        return content.replace("{{SKILLS_CONTEXT}}", "")
+
+    # Replace placeholder if present
+    if "{{SKILLS_CONTEXT}}" in content:
+        return content.replace("{{SKILLS_CONTEXT}}", skills_context)
+
+    # Otherwise append skills section
+    return content + f"\n\n## Available Expert Skills\n\n{skills_context}"
 
 
 def get_initializer_prompt(project_dir: Path | None = None) -> str:
-    """Load the initializer prompt (project-specific if available)."""
-    return load_prompt("initializer_prompt", project_dir)
+    """Load the initializer prompt with skills context (project-specific if available)."""
+    return load_prompt("initializer_prompt", project_dir, mode="initializer")
 
 
 def get_coding_prompt(project_dir: Path | None = None) -> str:
-    """Load the coding agent prompt (project-specific if available)."""
-    return load_prompt("coding_prompt", project_dir)
+    """Load the coding agent prompt with skills context (project-specific if available)."""
+    return load_prompt("coding_prompt", project_dir, mode="coding")
 
 
 def get_coding_prompt_yolo(project_dir: Path | None = None) -> str:
-    """Load the YOLO mode coding agent prompt (project-specific if available)."""
-    return load_prompt("coding_prompt_yolo", project_dir)
+    """Load the YOLO mode coding agent prompt with skills context (project-specific if available)."""
+    return load_prompt("coding_prompt_yolo", project_dir, mode="coding")
+
+
+def get_analysis_prompt(project_dir: Path | None = None) -> str:
+    """Load the analysis agent prompt with skills context (project-specific if available)."""
+    return load_prompt("analysis_prompt", project_dir, mode="analysis")
 
 
 def get_app_spec(project_dir: Path) -> str:

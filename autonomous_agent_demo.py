@@ -95,6 +95,14 @@ Authentication:
         help="Enable YOLO mode: rapid prototyping without browser testing",
     )
 
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default=None,
+        choices=["initializer", "coding", "analysis"],
+        help="Force specific agent mode (default: auto-detect based on features.db)",
+    )
+
     return parser.parse_args()
 
 
@@ -134,6 +142,7 @@ def main() -> None:
                 model=args.model,
                 max_iterations=args.max_iterations,
                 yolo_mode=args.yolo,
+                mode=args.mode,
             )
         )
     except KeyboardInterrupt:

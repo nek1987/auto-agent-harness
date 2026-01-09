@@ -26,6 +26,7 @@ from prompts import (
     get_coding_prompt,
     get_coding_prompt_yolo,
     get_initializer_prompt,
+    load_prompt,
 )
 
 # Configuration
@@ -111,6 +112,7 @@ async def run_autonomous_agent(
     model: str,
     max_iterations: Optional[int] = None,
     yolo_mode: bool = False,
+    mode: Optional[str] = None,
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -120,16 +122,22 @@ async def run_autonomous_agent(
         model: Claude model to use
         max_iterations: Maximum number of iterations (None for unlimited)
         yolo_mode: If True, skip browser testing and use YOLO prompt
+        mode: Force specific mode ("initializer", "coding", "analysis", or None for auto-detect)
     """
     print("\n" + "=" * 70)
     print("  AUTONOMOUS CODING AGENT DEMO")
     print("=" * 70)
     print(f"\nProject directory: {project_dir}")
     print(f"Model: {model}")
-    if yolo_mode:
+
+    # Determine mode
+    if mode == "analysis":
+        print("Mode: Analysis (scanning existing project)")
+    elif yolo_mode:
         print("Mode: YOLO (testing disabled)")
     else:
         print("Mode: Standard (full testing)")
+
     if max_iterations:
         print(f"Max iterations: {max_iterations}")
     else:
@@ -139,25 +147,41 @@ async def run_autonomous_agent(
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
 
-    # Check if this is a fresh start or continuation
-    # Uses has_features() which checks if the database actually has features,
-    # not just if the file exists (empty db should still trigger initializer)
-    is_first_run = not has_features(project_dir)
-
-    if is_first_run:
-        print("Fresh start - will use initializer agent")
-        print()
+    # Handle analysis mode
+    if mode == "analysis":
         print("=" * 70)
-        print("  NOTE: First session takes 10-20+ minutes!")
-        print("  The agent is generating 200 detailed test cases.")
-        print("  This may appear to hang - it's working. Watch for [Tool: ...] output.")
+        print("  ANALYSIS MODE")
+        print("  Scanning project to identify features and improvements")
         print("=" * 70)
         print()
-        # Copy the app spec into the project directory for the agent to read
-        copy_spec_to_project(project_dir)
+        is_first_run = False
+        is_analysis_mode = True
     else:
-        print("Continuing existing project")
-        print_progress_summary(project_dir)
+        is_analysis_mode = False
+        # Check if this is a fresh start or continuation
+        # Uses has_features() which checks if the database actually has features,
+        # not just if the file exists (empty db should still trigger initializer)
+        if mode == "initializer":
+            is_first_run = True
+        elif mode == "coding":
+            is_first_run = False
+        else:
+            is_first_run = not has_features(project_dir)
+
+        if is_first_run:
+            print("Fresh start - will use initializer agent")
+            print()
+            print("=" * 70)
+            print("  NOTE: First session takes 10-20+ minutes!")
+            print("  The agent is generating 200 detailed test cases.")
+            print("  This may appear to hang - it's working. Watch for [Tool: ...] output.")
+            print("=" * 70)
+            print()
+            # Copy the app spec into the project directory for the agent to read
+            copy_spec_to_project(project_dir)
+        else:
+            print("Continuing existing project")
+            print_progress_summary(project_dir)
 
     # Main loop
     iteration = 0
@@ -179,7 +203,12 @@ async def run_autonomous_agent(
 
         # Choose prompt based on session type
         # Pass project_dir to enable project-specific prompts
-        if is_first_run:
+        if is_analysis_mode:
+            prompt = load_prompt("analysis_prompt", project_dir)
+            # Analysis mode typically runs once - set max_iterations to 1 if not set
+            if max_iterations is None:
+                max_iterations = 1
+        elif is_first_run:
             prompt = get_initializer_prompt(project_dir)
             is_first_run = False  # Only use initializer once
         else:

@@ -77,6 +77,17 @@ class BulkCreateInput(BaseModel):
     features: list[FeatureCreateItem] = Field(..., min_length=1, description="List of features to create")
 
 
+class FeatureImportItem(BaseModel):
+    """Schema for importing a feature with status."""
+    category: str = Field(..., min_length=1, max_length=100, description="Feature category")
+    name: str = Field(..., min_length=1, max_length=255, description="Feature name")
+    description: str = Field(..., min_length=1, description="Detailed description")
+    steps: list[str] = Field(default_factory=lambda: ["Verify implementation"], description="Implementation/test steps")
+    passes: bool = Field(default=True, description="Whether feature is already implemented (default: True)")
+    source_spec: str = Field(default="imported", max_length=100, description="Source spec name")
+    dependencies: list[int] | None = Field(default=None, description="List of feature IDs this depends on")
+
+
 # Global database session maker (initialized on startup)
 _session_maker = None
 _engine = None
@@ -406,6 +417,141 @@ def feature_create_bulk(
         session.commit()
 
         return json.dumps({"created": created_count}, indent=2)
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": str(e)})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_import_existing(
+    features: Annotated[list[dict], Field(description="List of features to import with status")]
+) -> str:
+    """Import features from an existing project with pre-set statuses.
+
+    Unlike feature_create_bulk, this tool allows importing features that are
+    already implemented (passes=true by default). Use this when:
+    - Importing an existing project into the harness
+    - Migrating features from another system
+    - Setting up a project with known completed work
+
+    Features are assigned sequential priorities based on their order.
+
+    Args:
+        features: List of features to import, each with:
+            - category (str): Feature category (required)
+            - name (str): Feature name (required)
+            - description (str): Detailed description (required)
+            - steps (list[str]): Implementation/test steps (optional, defaults to ["Verify implementation"])
+            - passes (bool): Whether already implemented (optional, defaults to True)
+            - source_spec (str): Source spec name (optional, defaults to "imported")
+            - dependencies (list[int]): Feature IDs this depends on (optional)
+
+    Returns:
+        JSON with: imported (int), passing (int), pending (int)
+    """
+    session = get_session()
+    try:
+        # Get the starting priority
+        max_priority_result = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
+        start_priority = (max_priority_result[0] + 1) if max_priority_result else 1
+
+        imported_count = 0
+        passing_count = 0
+        pending_count = 0
+
+        for i, feature_data in enumerate(features):
+            # Validate required fields
+            if not all(key in feature_data for key in ["category", "name", "description"]):
+                return json.dumps({
+                    "error": f"Feature at index {i} missing required fields (category, name, description)"
+                })
+
+            # Extract values with defaults
+            passes = feature_data.get("passes", True)
+            source_spec = feature_data.get("source_spec", "imported")
+            steps = feature_data.get("steps", ["Verify implementation"])
+            dependencies = feature_data.get("dependencies")
+
+            db_feature = Feature(
+                priority=start_priority + i,
+                category=feature_data["category"],
+                name=feature_data["name"],
+                description=feature_data["description"],
+                steps=steps,
+                passes=passes,
+                in_progress=False,
+                source_spec=source_spec,
+                dependencies=dependencies,
+            )
+            session.add(db_feature)
+            imported_count += 1
+
+            if passes:
+                passing_count += 1
+            else:
+                pending_count += 1
+
+        session.commit()
+
+        return json.dumps({
+            "imported": imported_count,
+            "passing": passing_count,
+            "pending": pending_count,
+            "message": f"Imported {imported_count} features ({passing_count} passing, {pending_count} pending)"
+        }, indent=2)
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": str(e)})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_bulk_mark_passing(
+    feature_ids: Annotated[list[int], Field(description="List of feature IDs to mark as passing")]
+) -> str:
+    """Mark multiple features as passing in a single operation.
+
+    Use this when importing an existing project where multiple features
+    are already implemented and need to be marked as passing at once.
+
+    Args:
+        feature_ids: List of feature IDs to mark as passing
+
+    Returns:
+        JSON with: updated (int), not_found (list[int]), already_passing (list[int])
+    """
+    session = get_session()
+    try:
+        updated_count = 0
+        not_found = []
+        already_passing = []
+
+        for feature_id in feature_ids:
+            feature = session.query(Feature).filter(Feature.id == feature_id).first()
+
+            if feature is None:
+                not_found.append(feature_id)
+                continue
+
+            if feature.passes:
+                already_passing.append(feature_id)
+                continue
+
+            feature.passes = True
+            feature.in_progress = False
+            updated_count += 1
+
+        session.commit()
+
+        return json.dumps({
+            "updated": updated_count,
+            "not_found": not_found,
+            "already_passing": already_passing,
+            "message": f"Marked {updated_count} features as passing"
+        }, indent=2)
     except Exception as e:
         session.rollback()
         return json.dumps({"error": str(e)})

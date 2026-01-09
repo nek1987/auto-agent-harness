@@ -295,3 +295,30 @@ export type AssistantChatServerMessage =
   | AssistantChatErrorMessage
   | AssistantChatConversationCreatedMessage
   | AssistantChatPongMessage
+
+// ============================================================================
+// Import Feature Types
+// ============================================================================
+
+export interface ImportFeatureItem {
+  category: string
+  name: string
+  description: string
+  steps?: string[]
+  passes?: boolean // default true for existing features
+  source_spec?: string
+  dependencies?: number[]
+}
+
+export interface ImportFeaturesRequest {
+  features: ImportFeatureItem[]
+  clear_existing?: boolean
+}
+
+export interface ImportFeaturesResponse {
+  success: boolean
+  imported: number
+  passing: number
+  pending: number
+  message: string
+}

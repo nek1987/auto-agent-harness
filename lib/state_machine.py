@@ -8,6 +8,7 @@ and protection against invalid state changes.
 States:
 - IDLE: No active work
 - INITIALIZING: Reading spec, creating features
+- ANALYZING: Analyzing existing codebase to identify features
 - PLANNING: Creating execution plan for a feature
 - CODING: Implementing a feature
 - TESTING: Running tests for implemented feature
@@ -32,6 +33,7 @@ class AgentState(Enum):
     """Agent lifecycle states."""
     IDLE = "idle"
     INITIALIZING = "initializing"
+    ANALYZING = "analyzing"  # Analyzing existing codebase
     PLANNING = "planning"
     CODING = "coding"
     TESTING = "testing"
@@ -45,6 +47,7 @@ class AgentState(Enum):
 VALID_TRANSITIONS: dict[AgentState, list[AgentState]] = {
     AgentState.IDLE: [
         AgentState.INITIALIZING,
+        AgentState.ANALYZING,  # Can start analysis from idle
         AgentState.CODING,
         AgentState.PLANNING,
     ],
@@ -53,6 +56,13 @@ VALID_TRANSITIONS: dict[AgentState, list[AgentState]] = {
         AgentState.CODING,
         AgentState.ERROR,
         AgentState.COMPLETED,
+    ],
+    AgentState.ANALYZING: [
+        AgentState.PLANNING,  # After analysis, plan next steps
+        AgentState.CODING,    # Start implementing improvements
+        AgentState.COMPLETED, # Analysis finished, no work needed
+        AgentState.IDLE,      # Return to idle
+        AgentState.ERROR,     # Error during analysis
     ],
     AgentState.PLANNING: [
         AgentState.CODING,
@@ -265,6 +275,7 @@ class AgentStateMachine:
         """Check if agent is in an active (working) state."""
         return self.context.state in {
             AgentState.INITIALIZING,
+            AgentState.ANALYZING,
             AgentState.PLANNING,
             AgentState.CODING,
             AgentState.TESTING,

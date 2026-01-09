@@ -1,5 +1,5 @@
 # Core
-claude-agent-sdk>=0.1.0
+claude-agent-sdk>=0.1.19  # Updated for Claude Code v2.1.1 features (Jan 2026)
 python-dotenv>=1.0.0
 sqlalchemy>=2.0.0
 

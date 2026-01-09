@@ -13,6 +13,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from ..schemas import (
+    ImportFeaturesRequest,
+    ImportFeaturesResponse,
     ProjectCreate,
     ProjectDetail,
     ProjectPrompts,
@@ -338,3 +340,102 @@ async def get_project_stats_endpoint(name: str):
         raise HTTPException(status_code=404, detail="Project directory not found")
 
     return get_project_stats(project_dir)
+
+
+@router.post("/{name}/import", response_model=ImportFeaturesResponse)
+async def import_project_features(name: str, import_data: ImportFeaturesRequest):
+    """
+    Import features for an existing project with pre-set statuses.
+
+    This endpoint allows importing features from an existing project,
+    marking them as passing (implemented) or pending (needs work).
+
+    Args:
+        name: Project name
+        import_data: Features to import with their statuses
+    """
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    # Check if agent is running
+    lock_file = project_dir / ".agent.lock"
+    if lock_file.exists():
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot import features while agent is running. Stop the agent first."
+        )
+
+    # Import features using the database module
+    try:
+        import sys
+        root = Path(__file__).parent.parent.parent
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+
+        from api.database import Feature, get_db_session
+
+        db_path = project_dir / "features.db"
+        session = get_db_session(db_path)
+
+        try:
+            # Optionally clear existing features
+            if import_data.clear_existing:
+                session.query(Feature).delete()
+                session.commit()
+
+            # Get next priority
+            max_priority = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
+            next_priority = (max_priority[0] + 1) if max_priority else 1
+
+            # Import features
+            passing_count = 0
+            pending_count = 0
+
+            for feature_data in import_data.features:
+                db_feature = Feature(
+                    priority=next_priority,
+                    category=feature_data.category,
+                    name=feature_data.name,
+                    description=feature_data.description,
+                    steps=feature_data.steps,
+                    passes=feature_data.passes,
+                    in_progress=False,
+                    source_spec=feature_data.source_spec,
+                    dependencies=feature_data.dependencies,
+                )
+                session.add(db_feature)
+                next_priority += 1
+
+                if feature_data.passes:
+                    passing_count += 1
+                else:
+                    pending_count += 1
+
+            session.commit()
+
+            return ImportFeaturesResponse(
+                success=True,
+                imported=len(import_data.features),
+                passing=passing_count,
+                pending=pending_count,
+                message=f"Successfully imported {len(import_data.features)} features "
+                        f"({passing_count} passing, {pending_count} pending)"
+            )
+
+        finally:
+            session.close()
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to import features: {e}"
+        )

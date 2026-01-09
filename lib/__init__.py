@@ -7,10 +7,12 @@ Contains:
 - state_machine: Agent lifecycle state management
 - loop_detector: Detection of repetitive agent actions
 - checkpoint: State snapshots and rollback
+- skills_loader: Loading and managing skills from .claude/skills/
 """
 
 from .dependency_resolver import DependencyResolver, DependencyCycleError
 from .context_loader import load_context_files, get_context_files, ContextFile
+from .skills_loader import SkillsLoader, SkillInfo, get_skills_context, SKILL_CATEGORIES
 from .state_machine import (
     AgentState,
     AgentStateMachine,
@@ -30,6 +32,11 @@ __all__ = [
     "load_context_files",
     "get_context_files",
     "ContextFile",
+    # Skills loader
+    "SkillsLoader",
+    "SkillInfo",
+    "get_skills_context",
+    "SKILL_CATEGORIES",
     # State machine
     "AgentState",
     "AgentStateMachine",

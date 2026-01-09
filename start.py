@@ -82,6 +82,7 @@ def display_menu(projects: list[tuple[str, Path]]) -> None:
     if projects:
         print("[2] Continue existing project")
 
+    print("[3] Import existing project")
     print("[q] Quit")
     print()
 
@@ -345,6 +346,223 @@ def create_new_project_flow() -> tuple[str, Path] | None:
     return project_name, project_dir
 
 
+def import_existing_project_flow() -> tuple[str, Path] | None:
+    """
+    Import an existing project that already has implemented features.
+
+    Flow:
+    1. Get project name and path
+    2. Register project in registry
+    3. Choose import mode:
+       - Quick: Mark all features as implemented
+       - Analysis: Run analysis agent first
+       - Fresh: Start with no existing features
+    4. Return (name, path) tuple if successful
+    """
+    print("\n" + "-" * 50)
+    print("  Import Existing Project")
+    print("-" * 50)
+    print("\nImport a project that already has implemented features.")
+    print("The harness will track existing work and add new features.\n")
+
+    # Get project name
+    name = input("Project name (for registry): ").strip()
+    if not name:
+        return None
+
+    # Check if name already registered
+    existing = get_project_path(name)
+    if existing:
+        print(f"\nProject '{name}' already registered at {existing}")
+        use_existing = input("Use this existing project? [y/N]: ").strip().lower()
+        if use_existing == 'y':
+            return name, existing
+        return None
+
+    # Get project path
+    print("\nEnter the path to the existing project directory:")
+    path_str = input("Project path: ").strip()
+    if not path_str:
+        return None
+
+    project_path = Path(path_str).resolve()
+
+    if not project_path.exists():
+        print(f"\nError: Path does not exist: {project_path}")
+        return None
+
+    if not project_path.is_dir():
+        print(f"\nError: Path is not a directory: {project_path}")
+        return None
+
+    # Register project
+    register_project(name, project_path)
+    print(f"\nRegistered project '{name}' at {project_path}")
+
+    # Scaffold prompts if needed
+    if not has_project_prompts(project_path):
+        print("\nNo prompts found. Creating template prompts...")
+        scaffold_project_prompts(project_path)
+        print(f"Templates created in: {get_project_prompts_dir(project_path)}")
+
+    # Choose import mode
+    print("\n" + "-" * 40)
+    print("  Import Mode")
+    print("-" * 40)
+    print("\nHow should the harness handle existing features?")
+    print("\n[1] Quick Import (recommended for already-working project)")
+    print("    Create placeholder features marked as 'passing'")
+    print("    Agent will only work on NEW features you add")
+    print("\n[2] Run Analysis Agent")
+    print("    Scan codebase and identify features automatically")
+    print("    Generate improvement suggestions")
+    print("\n[3] Start Fresh")
+    print("    No existing features - agent starts from scratch")
+    print("    Use if you want full re-implementation")
+    print("\n[b] Back to main menu")
+    print()
+
+    while True:
+        choice = input("Select [1/2/3/b]: ").strip().lower()
+
+        if choice == 'b':
+            return None
+
+        elif choice == '1':
+            # Quick import - create placeholder features as passing
+            success = run_quick_import(project_path)
+            if success:
+                return name, project_path
+            return None
+
+        elif choice == '2':
+            # Run analysis agent
+            success = run_analysis_mode(name, project_path)
+            if success:
+                return name, project_path
+            return None
+
+        elif choice == '3':
+            # Fresh start - just return, agent will initialize
+            print("\nProject imported with no existing features.")
+            print("The initializer agent will create features from your spec.")
+            return name, project_path
+
+        else:
+            print("Invalid choice. Please enter 1, 2, 3, or b.")
+
+
+def run_quick_import(project_dir: Path) -> bool:
+    """
+    Quick import mode - creates placeholder features marked as passing.
+
+    Asks user for a number of features to mark as "already implemented".
+    """
+    print("\n" + "-" * 40)
+    print("  Quick Import")
+    print("-" * 40)
+
+    print("\nHow many features are already implemented in this project?")
+    print("(Enter 0 to skip creating placeholder features)")
+
+    try:
+        count_str = input("Number of implemented features: ").strip()
+        if not count_str:
+            return True  # No features to import, but still success
+
+        count = int(count_str)
+        if count <= 0:
+            print("\nNo placeholder features created.")
+            return True
+
+    except ValueError:
+        print("\nInvalid number.")
+        return False
+
+    # Create placeholder features via direct database access
+    from api.database import Feature, create_database
+
+    engine, session_maker = create_database(project_dir)
+    session = session_maker()
+
+    try:
+        # Check if features already exist
+        existing_count = session.query(Feature).count()
+        if existing_count > 0:
+            print(f"\nWarning: {existing_count} features already exist.")
+            overwrite = input("Add more features anyway? [y/N]: ").strip().lower()
+            if overwrite != 'y':
+                return False
+
+        # Get starting priority
+        max_priority_result = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
+        start_priority = (max_priority_result[0] + 1) if max_priority_result else 1
+
+        # Create placeholder features
+        for i in range(count):
+            feature = Feature(
+                priority=start_priority + i,
+                category="Imported",
+                name=f"Existing Feature {i + 1}",
+                description="Pre-existing feature imported from existing project.",
+                steps=["Feature was already implemented before import."],
+                passes=True,  # KEY: marked as passing
+                in_progress=False,
+                source_spec="imported",
+            )
+            session.add(feature)
+
+        session.commit()
+        print(f"\nCreated {count} placeholder features (all marked as passing).")
+        print("The agent will skip these and only work on new features.")
+        return True
+
+    except Exception as e:
+        session.rollback()
+        print(f"\nError creating features: {e}")
+        return False
+    finally:
+        session.close()
+
+
+def run_analysis_mode(project_name: str, project_dir: Path) -> bool:
+    """
+    Run the analysis agent to scan the project and identify features.
+    """
+    print("\n" + "-" * 40)
+    print("  Analysis Mode")
+    print("-" * 40)
+    print("\nThe analysis agent will:")
+    print("  1. Scan the project structure")
+    print("  2. Identify implemented features")
+    print("  3. Generate improvement suggestions")
+    print("  4. Create a feature list")
+
+    confirm = input("\nStart analysis? [Y/n]: ").strip().lower()
+    if confirm == 'n':
+        return False
+
+    print(f"\nStarting analysis agent for: {project_name}")
+    print(f"Location: {project_dir}")
+    print("-" * 50)
+
+    # Build the command - pass --analysis flag
+    cmd = [
+        sys.executable,
+        "autonomous_agent_demo.py",
+        "--project-dir", str(project_dir.resolve()),
+        "--mode", "analysis"
+    ]
+
+    try:
+        subprocess.run(cmd, check=False)
+        print("\nAnalysis complete.")
+        return True
+    except KeyboardInterrupt:
+        print("\n\nAnalysis interrupted.")
+        return False
+
+
 def run_agent(project_name: str, project_dir: Path) -> None:
     """Run the autonomous agent with the given project.
 
@@ -402,6 +620,35 @@ def main() -> None:
             if selected:
                 project_name, project_dir = selected
                 run_agent(project_name, project_dir)
+
+        elif choice == '3':
+            result = import_existing_project_flow()
+            if result:
+                project_name, project_dir = result
+                # Ask if user wants to run agent now or add spec first
+                print("\n" + "-" * 40)
+                print("  Next Steps")
+                print("-" * 40)
+                print("\n[1] Run agent now")
+                print("[2] Add new spec first (/add-spec)")
+                print("[3] Return to main menu")
+                next_choice = input("\nSelect [1/2/3]: ").strip()
+
+                if next_choice == '1':
+                    run_agent(project_name, project_dir)
+                elif next_choice == '2':
+                    # Run /add-spec command
+                    print("\nLaunching Claude Code for spec addition...")
+                    try:
+                        subprocess.run(
+                            ["claude", f"/add-spec {project_dir}"],
+                            check=False,
+                            cwd=str(Path(__file__).parent)
+                        )
+                    except FileNotFoundError:
+                        print("\nError: 'claude' command not found.")
+                    except KeyboardInterrupt:
+                        print("\n\nSpec addition cancelled.")
 
         else:
             print("Invalid option. Please try again.")

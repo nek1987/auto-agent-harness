@@ -16,6 +16,8 @@ import type {
   PathValidationResponse,
   AssistantConversation,
   AssistantConversationDetail,
+  ImportFeaturesRequest,
+  ImportFeaturesResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -63,6 +65,16 @@ export async function getProject(name: string): Promise<ProjectDetail> {
 export async function deleteProject(name: string): Promise<void> {
   await fetchJSON(`/projects/${encodeURIComponent(name)}`, {
     method: 'DELETE',
+  })
+}
+
+export async function importFeatures(
+  name: string,
+  data: ImportFeaturesRequest
+): Promise<ImportFeaturesResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/import`, {
+    method: 'POST',
+    body: JSON.stringify(data),
   })
 }
 

@@ -3,18 +3,28 @@ Claude SDK Client Configuration
 ===============================
 
 Functions for creating and configuring the Claude Agent SDK client.
+
+Updated for Claude Code v2.1.1 / SDK 0.1.19 features:
+- Enhanced hooks (PostToolUse, SessionStart, SessionEnd)
+- Improved tool logging
+- Skills integration via setting_sources
 """
 
 import json
+import logging
 import os
 import shutil
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import HookMatcher
 
 from security import bash_security_hook
+
+# Logger for tool execution tracking
+logger = logging.getLogger(__name__)
 
 # Feature MCP tools for feature/test management
 FEATURE_MCP_TOOLS = [
@@ -71,6 +81,66 @@ BUILTIN_TOOLS = [
     "WebFetch",
     "WebSearch",
 ]
+
+
+# ============================================================================
+# Enhanced Hooks (SDK 0.1.19 / Claude Code v2.1.1)
+# ============================================================================
+
+def post_tool_use_hook(tool_name: str, tool_input: dict, tool_result: str) -> None:
+    """
+    PostToolUse hook for logging tool executions.
+
+    This provides an audit trail of all tool calls and their results,
+    useful for debugging and monitoring agent behavior.
+
+    Args:
+        tool_name: Name of the tool that was executed
+        tool_input: Input parameters passed to the tool
+        tool_result: Result returned by the tool
+    """
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    # Truncate large results for logging
+    result_preview = str(tool_result)[:200]
+    if len(str(tool_result)) > 200:
+        result_preview += "..."
+
+    logger.debug(
+        f"[{timestamp}] Tool executed: {tool_name} | "
+        f"Result length: {len(str(tool_result))} chars"
+    )
+
+    # Log more details at trace level if available
+    if logger.isEnabledFor(logging.DEBUG):
+        input_str = json.dumps(tool_input, default=str)[:300]
+        logger.debug(f"  Input: {input_str}")
+        logger.debug(f"  Result: {result_preview}")
+
+
+def session_start_hook(session_id: str, **kwargs) -> None:
+    """
+    SessionStart hook called when agent session begins.
+
+    Args:
+        session_id: Unique identifier for this session
+        **kwargs: Additional session metadata
+    """
+    timestamp = datetime.now(timezone.utc).isoformat()
+    logger.info(f"[{timestamp}] Agent session started: {session_id}")
+
+
+def session_end_hook(session_id: str, reason: str = "completed", **kwargs) -> None:
+    """
+    SessionEnd hook called when agent session ends.
+
+    Args:
+        session_id: Unique identifier for this session
+        reason: Why the session ended (completed, error, max_turns, etc.)
+        **kwargs: Additional session metadata
+    """
+    timestamp = datetime.now(timezone.utc).isoformat()
+    logger.info(f"[{timestamp}] Agent session ended: {session_id} (reason: {reason})")
 
 
 def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
@@ -189,9 +259,17 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
             allowed_tools=allowed_tools,
             mcp_servers=mcp_servers,
             hooks={
+                # Security: Validate bash commands against allowlist
                 "PreToolUse": [
                     HookMatcher(matcher="Bash", hooks=[bash_security_hook]),
                 ],
+                # Audit: Log all tool executions (SDK 0.1.19)
+                "PostToolUse": [
+                    HookMatcher(matcher="*", hooks=[post_tool_use_hook]),
+                ],
+                # Lifecycle: Session start/end logging (SDK 0.1.19)
+                "SessionStart": [session_start_hook],
+                "SessionEnd": [session_end_hook],
             },
             max_turns=1000,
             cwd=str(project_dir.resolve()),

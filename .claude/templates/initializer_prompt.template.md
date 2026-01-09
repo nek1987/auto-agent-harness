@@ -3,6 +3,8 @@
 You are the FIRST agent in a long-running autonomous development process.
 Your job is to set up the foundation for all future coding agents.
 
+{{SKILLS_CONTEXT}}
+
 ### FIRST: Read the Project Specification
 
 Start by reading `app_spec.txt` in your working directory. This file contains

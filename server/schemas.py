@@ -239,3 +239,33 @@ class CreateDirectoryRequest(BaseModel):
     """Request to create a new directory."""
     parent_path: str
     name: str = Field(..., min_length=1, max_length=255)
+
+
+# ============================================================================
+# Import Feature Schemas
+# ============================================================================
+
+class ImportFeatureItem(BaseModel):
+    """Schema for importing a single feature with status."""
+    category: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str = Field(..., min_length=1)
+    steps: list[str] = Field(default_factory=lambda: ["Verify implementation"])
+    passes: bool = Field(default=True, description="Whether feature is already implemented")
+    source_spec: str = Field(default="imported", max_length=100)
+    dependencies: list[int] | None = Field(default=None)
+
+
+class ImportFeaturesRequest(BaseModel):
+    """Request schema for importing features into a project."""
+    features: list[ImportFeatureItem]
+    clear_existing: bool = Field(default=False, description="Clear existing features before import")
+
+
+class ImportFeaturesResponse(BaseModel):
+    """Response schema for feature import."""
+    success: bool
+    imported: int
+    passing: int
+    pending: int
+    message: str
