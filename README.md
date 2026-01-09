@@ -27,50 +27,56 @@ A production-ready autonomous coding agent system with a React-based UI. Built o
 
 ### Prerequisites
 
-**Claude Code CLI** (required):
-```bash
-# macOS / Linux
-curl -fsSL https://claude.ai/install.sh | bash
+- **Python 3.11+**
+- **Claude Code CLI**: `npm install -g @anthropic-ai/claude-code`
+- **Authentication**: Claude Pro/Max subscription OR Anthropic API key
 
-# Windows (PowerShell)
-irm https://claude.ai/install.ps1 | iex
-```
+### Option A: Native Mode (Local Development)
 
-**Authentication**: Claude Pro/Max subscription or Anthropic API key.
-
-### Option 1: Web UI (Recommended)
+> **Best for**: Using Claude Pro/Max subscription, local development
 
 ```bash
-# Windows
-start_ui.bat
+# 1. Clone and setup
+git clone https://github.com/nek1987/auto-agent-harness.git
+cd auto-agent-harness
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
 
-# macOS / Linux
-./start_ui.sh
+# 2. Configure
+cp .env.native.example .env
+
+# 3. Login to Claude (opens browser)
+claude login
+
+# 4. Start
+./start.sh        # Linux/macOS
+start.bat         # Windows
 ```
 
-Opens at `http://localhost:5173` with:
-- Project management and creation
-- Kanban board view of features
-- Real-time agent output streaming
-- Start/pause/stop controls
+Access UI at `http://localhost:8888`
 
-### Option 2: CLI Mode
+### Option B: Docker Mode (Server Deployment)
+
+> **Best for**: Production servers, pay-per-token API usage
 
 ```bash
-# Windows
-start.bat
+# 1. Clone
+git clone https://github.com/nek1987/auto-agent-harness.git
+cd auto-agent-harness
 
-# macOS / Linux
-./start.sh
+# 2. Configure
+cp .env.docker.example .env
+# Edit .env: add ANTHROPIC_API_KEY
+# Generate JWT_SECRET_KEY: python -c "import secrets; print(secrets.token_hex(32))"
+
+# 3. Start
+docker-compose up -d --build
 ```
 
-### Option 3: Docker
+Access UI at `http://localhost:8888`
 
-```bash
-docker-compose up -d
-```
-
-Access at `http://localhost:8888`
+> **Advanced deployment**: See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ---
 
@@ -191,23 +197,23 @@ cm.rollback(cp.id)  # Restore git + database
 
 ## Configuration
 
-### Environment Variables
+> **Full Reference**: See [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
 
-```bash
-# Authentication
-AUTH_ENABLED=true
-JWT_SECRET_KEY=<generate-with-secrets.token_hex(32)>
-DEFAULT_ADMIN_PASSWORD=admin
+### Quick Setup
 
-# Path Security
-ALLOWED_ROOT_DIRECTORY=/workspace
-DATA_DIR=/app/data
-REQUIRE_LOCALHOST=false
+| Scenario | Config File | Command |
+|----------|-------------|---------|
+| Local development | [.env.native.example](.env.native.example) | `cp .env.native.example .env` |
+| Docker deployment | [.env.docker.example](.env.docker.example) | `cp .env.docker.example .env` |
+| Production | [.env.production.example](.env.production.example) | `cp .env.production.example .env` |
 
-# Server
-HOST=0.0.0.0
-PORT=8888
-```
+### Essential Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `JWT_SECRET_KEY` | Production | Generate: `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `ANTHROPIC_API_KEY` | Docker mode | Your Anthropic API key ([get one](https://console.anthropic.com/)) |
+| `DEFAULT_ADMIN_PASSWORD` | Recommended | Initial admin password (default: `admin`) |
 
 ### Multi-Spec Support
 
@@ -371,6 +377,45 @@ ws://localhost:8888/ws/projects/{project_name}
 // - log: { message: string, timestamp: string }
 // - feature_update: { id: number, status: string }
 ```
+
+---
+
+## Troubleshooting
+
+### "No Claude credentials found"
+
+**Native mode**: Run `claude login` to authenticate via browser.
+
+**Docker mode**: Check `ANTHROPIC_API_KEY` is set in `.env`.
+
+### "JWT token invalid" or sessions not persisting
+
+Generate a persistent `JWT_SECRET_KEY`:
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+Add to `.env` and restart.
+
+### "Permission denied" on workspace
+
+```bash
+# Docker uses UID 1000
+sudo chown -R 1000:1000 ./workspace
+```
+
+### Container won't start
+
+```bash
+# Check logs
+docker-compose logs auto-agent-harness
+
+# Common issues:
+# 1. JWT_SECRET_KEY not set
+# 2. Port 8888 already in use
+# 3. ANTHROPIC_API_KEY missing or invalid
+```
+
+> **More solutions**: See [docs/DEPLOYMENT.md#troubleshooting](docs/DEPLOYMENT.md#troubleshooting)
 
 ---
 

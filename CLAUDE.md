@@ -271,21 +271,23 @@ Defense-in-depth approach with multiple layers:
 
 ### Environment Variables
 
+> **Full Reference**: See [docs/CONFIGURATION.md](docs/CONFIGURATION.md)
+
+**Quick setup:**
 ```bash
-# Authentication
-AUTH_ENABLED=true                    # Enable/disable auth
-JWT_SECRET_KEY=<random-hex-32>       # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
-DEFAULT_ADMIN_PASSWORD=admin         # Initial admin password
+# Native mode (local development with OAuth)
+cp .env.native.example .env
 
-# Path Security
-ALLOWED_ROOT_DIRECTORY=/workspace    # Restrict file ops to this dir
-DATA_DIR=/app/data                   # Settings/users storage
-REQUIRE_LOCALHOST=false              # Local-only access
-
-# Server
-HOST=0.0.0.0
-PORT=8888
+# Docker mode (server deployment with API key)
+cp .env.docker.example .env
 ```
+
+**Essential variables:**
+| Variable | Required | Mode |
+|----------|----------|------|
+| `JWT_SECRET_KEY` | Production | All |
+| `ANTHROPIC_API_KEY` | Yes | Docker |
+| `ALLOWED_ROOT_DIRECTORY` | Yes | Docker |
 
 ### Docker Deployment
 

@@ -1,26 +1,27 @@
-# Server Deployment Guide: Auto-Agent-Harness
+# Server Deployment Guide
 
-Руководство по развёртыванию Auto-Agent-Harness на сервере.
-
----
-
-## Содержание
-
-1. [Требования](#требования-к-серверу)
-2. [Режимы аутентификации Claude](#режимы-аутентификации-claude)
-3. [Режим 1: Native (OAuth подписка)](#режим-1-native-oauth-подписка)
-4. [Режим 2: Docker + API Key](#режим-2-docker--api-key)
-5. [Режим 3: Docker + OAuth (Гибрид)](#режим-3-docker--oauth-гибрид)
-6. [Импорт существующего проекта](#импорт-существующего-проекта)
-7. [Конфигурация](#конфигурация)
-8. [Troubleshooting](#troubleshooting)
+Guide for deploying Auto-Agent-Harness on a server.
 
 ---
 
-## Требования к серверу
+## Table of Contents
 
-| Компонент | Минимум | Рекомендуется |
-|-----------|---------|---------------|
+1. [Server Requirements](#server-requirements)
+2. [Claude Authentication Modes](#claude-authentication-modes)
+3. [Mode 1: Native (OAuth Subscription)](#mode-1-native-oauth-subscription)
+4. [Mode 2: Docker + API Key](#mode-2-docker--api-key)
+5. [Mode 3: Docker + OAuth (Hybrid)](#mode-3-docker--oauth-hybrid)
+6. [Importing Existing Projects](#importing-existing-projects)
+7. [Configuration](#configuration)
+8. [Nginx Reverse Proxy](#nginx-reverse-proxy)
+9. [Troubleshooting](#troubleshooting)
+
+---
+
+## Server Requirements
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
 | RAM | 2 GB | 4 GB |
 | CPU | 2 cores | 4 cores |
 | Disk | 20 GB | 50 GB |
@@ -30,72 +31,75 @@
 
 ---
 
-## Режимы аутентификации Claude
+## Claude Authentication Modes
 
-Auto-Agent-Harness поддерживает **три режима** аутентификации с Claude API:
+Auto-Agent-Harness supports **three authentication modes** with Claude API:
 
-| Режим | Где работает | Auth Method | Цена | Рекомендуется для |
-|-------|--------------|-------------|------|-------------------|
-| **Native** | Локальная машина | OAuth (subscription) | Подписка Claude Pro/Max | Разработка |
-| **Docker + API Key** | Сервер/облако | API Key | Pay-per-token | Production (простое) |
-| **Docker + OAuth** | Сервер/облако | OAuth (mounted) | Подписка | Production (экономия) |
+| Mode | Environment | Auth Method | Cost | Best For |
+|------|-------------|-------------|------|----------|
+| **Native** | Local machine | OAuth (subscription) | Claude Pro/Max subscription | Development |
+| **Docker + API Key** | Server/cloud | API Key | Pay-per-token | Simple production |
+| **Docker + OAuth** | Server/cloud | OAuth (mounted) | Subscription | Cost-effective production |
 
-### Сравнение режимов
+### Mode Comparison
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     NATIVE MODE                                  │
-│  ✅ Использует подписку Claude Pro/Max                          │
-│  ✅ Простая настройка (claude login)                            │
-│  ❌ Требует локальную машину с браузером                        │
+│  ✅ Uses Claude Pro/Max subscription                            │
+│  ✅ Simple setup (claude login)                                 │
+│  ❌ Requires local machine with browser                         │
 ├─────────────────────────────────────────────────────────────────┤
 │                  DOCKER + API KEY                                │
-│  ✅ Работает на любом сервере                                   │
-│  ✅ Простой deployment                                          │
-│  ❌ Платите за каждый токен                                     │
+│  ✅ Works on any server                                         │
+│  ✅ Simple deployment                                           │
+│  ❌ Pay for each token                                          │
 ├─────────────────────────────────────────────────────────────────┤
 │                  DOCKER + OAUTH                                  │
-│  ✅ Работает на сервере                                         │
-│  ✅ Использует подписку (экономия)                              │
-│  ❌ Нужно периодически обновлять токены                         │
+│  ✅ Works on server                                             │
+│  ✅ Uses subscription (cost savings)                            │
+│  ❌ Need to periodically refresh tokens                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Режим 1: Native (OAuth подписка)
+## Mode 1: Native (OAuth Subscription)
 
-**Лучший для:** Локальная разработка, использование Claude Pro/Max подписки.
+**Best for:** Local development, using Claude Pro/Max subscription.
 
-### Требования
-- Локальная машина (Windows/macOS/Linux)
-- Браузер для OAuth
+### Requirements
+- Local machine (Windows/macOS/Linux)
+- Browser for OAuth
 - Claude CLI (`npm install -g @anthropic-ai/claude-code`)
 
-### Установка
+### Installation
 
 ```bash
-# 1. Клонировать репозиторий
+# 1. Clone repository
 git clone https://github.com/nek1987/auto-agent-harness.git
 cd auto-agent-harness
 
-# 2. Создать виртуальное окружение
+# 2. Create virtual environment
 python -m venv venv
 source venv/bin/activate  # Linux/macOS
-# или: venv\Scripts\activate  # Windows
+# or: venv\Scripts\activate  # Windows
 
-# 3. Установить зависимости
+# 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Авторизоваться в Claude (откроется браузер)
+# 4. Configure environment
+cp .env.native.example .env
+
+# 5. Login to Claude (opens browser)
 claude login
 
-# 5. Запустить
+# 6. Start
 ./start.sh  # Linux/macOS
-# или: start.bat  # Windows
+# or: start.bat  # Windows
 ```
 
-### Как это работает
+### How It Works
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -116,60 +120,50 @@ claude login
 
 ---
 
-## Режим 2: Docker + API Key
+## Mode 2: Docker + API Key
 
-**Лучший для:** Простой серверный deployment, облачные платформы.
+**Best for:** Simple server deployment, cloud platforms.
 
-### Установка (Быстрый старт)
+### Quick Start
 
 ```bash
-# 1. Клонировать репозиторий
+# 1. Clone repository
 git clone https://github.com/nek1987/auto-agent-harness.git
 cd auto-agent-harness
 
-# 2. Интерактивная настройка
+# 2. Interactive setup
 ./scripts/setup-docker-auth.sh --api-key
-# Введите ваш ANTHROPIC_API_KEY
+# Enter your ANTHROPIC_API_KEY
 
-# 3. Запустить
+# 3. Start
 docker-compose up -d --build
 ```
 
-### Ручная установка
+### Manual Installation
 
 ```bash
-# 1. Клонировать
+# 1. Clone
 git clone https://github.com/nek1987/auto-agent-harness.git
 cd auto-agent-harness
 
-# 2. Создать workspace
+# 2. Create workspace
 mkdir -p workspace
 
-# 3. Создать .env
-cat > .env << 'EOF'
-# Claude API Authentication
-ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
+# 3. Configure environment
+cp .env.docker.example .env
 
-# Application Authentication
-JWT_SECRET_KEY=REPLACE_WITH_RANDOM_32_CHAR_HEX
-DEFAULT_ADMIN_PASSWORD=your-secure-password
+# 4. Edit .env - add your API key and generate JWT secret
+# ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
+# JWT_SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 
-# Paths
-WORKSPACE_DIR=./workspace
-EOF
-
-# 4. Сгенерировать JWT secret
-JWT=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-sed -i "s/REPLACE_WITH_RANDOM_32_CHAR_HEX/$JWT/" .env
-
-# 5. Запустить
+# 5. Start
 docker-compose up -d --build
 
-# 6. Проверить
+# 6. Verify
 curl http://localhost:8888/api/health
 ```
 
-### Как это работает
+### How It Works
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -187,15 +181,15 @@ curl http://localhost:8888/api/health
 
 ---
 
-## Режим 3: Docker + OAuth (Гибрид)
+## Mode 3: Docker + OAuth (Hybrid)
 
-**Лучший для:** Серверный deployment с использованием Claude Pro/Max подписки.
+**Best for:** Server deployment using Claude Pro/Max subscription.
 
-### Как это работает
+### How It Works
 
-1. **Один раз** на локальной машине: `claude login` + извлечение токенов
-2. Токены копируются на сервер
-3. Docker использует подписку через извлечённые токены
+1. **Once** on local machine: `claude login` + extract tokens
+2. Tokens are copied to server
+3. Docker uses subscription via extracted tokens
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -227,123 +221,125 @@ curl http://localhost:8888/api/health
 └─────────────────────────────────────────────────┘
 ```
 
-### Установка
+### Installation
 
-#### На локальной машине:
+#### On Local Machine:
 
 ```bash
-# 1. Клонировать репозиторий
+# 1. Clone repository
 git clone https://github.com/nek1987/auto-agent-harness.git
 cd auto-agent-harness
 
-# 2. Авторизоваться в Claude (если ещё не сделано)
+# 2. Login to Claude (if not already done)
 claude login
 
-# 3. Извлечь credentials
+# 3. Extract credentials
 ./scripts/setup-docker-auth.sh --oauth-extract
 
-# 4. Скопировать на сервер
+# 4. Copy to server
 rsync -avz . user@server:/opt/autocoder/auto-agent-harness/
 ```
 
-#### На сервере:
+#### On Server:
 
 ```bash
-# 1. Перейти в директорию
+# 1. Navigate to directory
 cd /opt/autocoder/auto-agent-harness
 
-# 2. Запустить
+# 2. Start
 docker-compose up -d --build
 
-# 3. Проверить
+# 3. Verify
 curl http://localhost:8888/api/health
 ```
 
-### Обновление токенов
+### Refreshing Tokens
 
-OAuth токены истекают периодически. Для обновления:
+OAuth tokens expire periodically. To refresh:
 
 ```bash
-# На локальной машине
+# On local machine
 cd auto-agent-harness
 ./scripts/setup-docker-auth.sh --oauth-extract
 
-# Скопировать обновлённые credentials на сервер
+# Copy updated credentials to server
 rsync -avz .docker-credentials/ user@server:/opt/autocoder/auto-agent-harness/.docker-credentials/
 
-# На сервере: перезапустить контейнер
+# On server: restart container
 ssh user@server "cd /opt/autocoder/auto-agent-harness && docker-compose restart"
 ```
 
 ---
 
-## Импорт существующего проекта
+## Importing Existing Projects
 
-После установки (любой режим) можно импортировать существующие проекты.
+After installation (any mode), you can import existing projects.
 
-### Через UI
+### Via UI
 
-1. Открыть UI: `http://server:8888`
-2. Нажать **"Import Existing"**
-3. Выбрать папку проекта
-4. Выбрать режим:
-   - **Analysis Mode** - агент анализирует код, создаёт features
-   - **Skip Analysis** - просто регистрирует проект
+1. Open UI: `http://server:8888`
+2. Click **"Import Existing"**
+3. Select project folder
+4. Choose mode:
+   - **Analysis Mode** - Agent analyzes code, creates features
+   - **Skip Analysis** - Just registers the project
 
-### Через CLI (Docker)
+### Via CLI (Docker)
 
 ```bash
-# 1. Скопировать проект в workspace
+# 1. Copy project to workspace
 cp -r /path/to/your-project /opt/autocoder/workspace/
 
-# 2. Зарегистрировать через API
+# 2. Register via API
 curl -X POST http://localhost:8888/api/projects/import \
   -H "Authorization: Bearer TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"path": "/workspace/your-project", "name": "your-project"}'
 ```
 
-### Через CLI (Native)
+### Via CLI (Native)
 
 ```bash
-# 1. Запустить start.py
+# 1. Start start.py
 python start.py
 
-# 2. Выбрать "Import existing project"
-# 3. Указать путь к проекту
+# 2. Select "Import existing project"
+# 3. Enter path to project
 ```
 
 ---
 
-## Конфигурация
+## Configuration
 
-### Переменные окружения
+> **Full Reference**: See [CONFIGURATION.md](CONFIGURATION.md)
 
-| Переменная | Описание | Default | Режим |
-|------------|----------|---------|-------|
-| `ANTHROPIC_API_KEY` | API ключ Anthropic | - | Docker + API Key |
-| `AUTH_ENABLED` | Включить UI аутентификацию | `true` | Все |
-| `JWT_SECRET_KEY` | Секрет для JWT токенов | **Обязательно** | Все |
-| `DEFAULT_ADMIN_PASSWORD` | Пароль админа | `admin` | Все |
-| `PORT` | Порт сервера | `8888` | Все |
-| `WORKSPACE_DIR` | Директория проектов | `./workspace` | Docker |
-| `ALLOWED_ROOT_DIRECTORY` | Root в контейнере | `/workspace` | Docker |
-| `DATA_DIR` | Директория данных | `/app/data` | Docker |
-| `REQUIRE_LOCALHOST` | Только localhost | `false` | Docker |
+### Environment Variables
 
-### Структура директорий
+| Variable | Description | Default | Mode |
+|----------|-------------|---------|------|
+| `ANTHROPIC_API_KEY` | Anthropic API key | - | Docker + API Key |
+| `AUTH_ENABLED` | Enable UI authentication | `true` | All |
+| `JWT_SECRET_KEY` | JWT token secret | **Required** | All |
+| `DEFAULT_ADMIN_PASSWORD` | Admin password | `admin` | All |
+| `PORT` | Server port | `8888` | All |
+| `WORKSPACE_DIR` | Projects directory | `./workspace` | Docker |
+| `ALLOWED_ROOT_DIRECTORY` | Container root | `/workspace` | Docker |
+| `DATA_DIR` | Data directory | `/app/data` | Docker |
+| `REQUIRE_LOCALHOST` | Localhost only | `false` | Docker |
+
+### Directory Structure
 
 ```
 /opt/autocoder/
-├── auto-agent-harness/     # Репозиторий приложения
+├── auto-agent-harness/     # Application repository
 │   ├── docker-compose.yml
 │   ├── Dockerfile
-│   ├── .env                # Конфигурация
-│   ├── .docker-credentials/# OAuth credentials (если режим 3)
+│   ├── .env                # Configuration
+│   ├── .docker-credentials/# OAuth credentials (Mode 3)
 │   └── scripts/
 │       ├── extract-claude-credentials.sh
 │       └── setup-docker-auth.sh
-└── workspace/              # Директория проектов
+└── workspace/              # Projects directory
     ├── project-1/
     └── project-2/
 ```
@@ -384,97 +380,97 @@ server {
 
 ## Troubleshooting
 
-### Проблема: "No Claude credentials found"
+### Problem: "No Claude credentials found"
 
-**Причина:** OAuth credentials не найдены.
+**Cause:** OAuth credentials not found.
 
-**Решение:**
+**Solution:**
 ```bash
 # Native mode
 claude login
 
-# Docker mode - проверить монтирование
+# Docker mode - check volume mount
 docker-compose exec auto-agent-harness ls -la /home/autocoder/.claude/
 ```
 
-### Проблема: "API key invalid"
+### Problem: "API key invalid"
 
-**Причина:** Неверный или истёкший API ключ.
+**Cause:** Invalid or expired API key.
 
-**Решение:**
+**Solution:**
 ```bash
-# Проверить .env
+# Check .env
 grep ANTHROPIC_API_KEY .env
 
-# Проверить что ключ передан в контейнер
+# Check that key is passed to container
 docker-compose exec auto-agent-harness env | grep ANTHROPIC
 ```
 
-### Проблема: "OAuth token expired"
+### Problem: "OAuth token expired"
 
-**Причина:** OAuth токены истекли (обычно через 7 дней).
+**Cause:** OAuth tokens expired (typically after 7 days).
 
-**Решение:**
+**Solution:**
 ```bash
-# На локальной машине
-claude login  # Обновить токены
+# On local machine
+claude login  # Refresh tokens
 ./scripts/setup-docker-auth.sh --oauth-extract
 
-# Скопировать на сервер и перезапустить
+# Copy to server and restart
 rsync -avz .docker-credentials/ user@server:/path/to/.docker-credentials/
 ssh user@server "cd /path/to/harness && docker-compose restart"
 ```
 
-### Проблема: Container не запускается
+### Problem: Container won't start
 
 ```bash
-# Проверить логи
+# Check logs
 docker-compose logs auto-agent-harness
 
-# Проверить .env
+# Check .env
 cat .env | grep -v "^#" | grep -v "^$"
 
-# Частые проблемы:
-# 1. JWT_SECRET_KEY не указан
-# 2. Порт занят
-# 3. Недостаточно памяти
+# Common issues:
+# 1. JWT_SECRET_KEY not set
+# 2. Port already in use
+# 3. Not enough memory
 ```
 
-### Проблема: Permission denied
+### Problem: Permission denied
 
 ```bash
-# Проверить права на workspace
+# Check workspace permissions
 ls -la workspace/
 
-# Исправить (Docker user имеет UID 1000)
+# Fix (Docker user has UID 1000)
 sudo chown -R 1000:1000 workspace/
 ```
 
 ---
 
-## Полезные команды
+## Useful Commands
 
 ```bash
-# Статус
+# Status
 docker-compose ps
 
-# Логи
+# Logs
 docker-compose logs -f
 
-# Перезапуск
+# Restart
 docker-compose restart
 
-# Пересборка
+# Rebuild
 docker-compose build --no-cache && docker-compose up -d
 
-# Войти в контейнер
+# Shell into container
 docker-compose exec auto-agent-harness bash
 
-# Backup данных
+# Backup data
 docker run --rm -v autocoder-data:/data -v $(pwd):/backup \
   alpine tar czf /backup/autocoder-backup.tar.gz /data
 
-# Проверить credentials в контейнере
+# Check credentials in container
 docker-compose exec auto-agent-harness cat /home/autocoder/.claude/.credentials.json | head -c 100
 ```
 
@@ -487,6 +483,7 @@ docker-compose exec auto-agent-harness cat /home/autocoder/.claude/.credentials.
 git clone https://github.com/nek1987/auto-agent-harness.git
 cd auto-agent-harness
 pip install -r requirements.txt
+cp .env.native.example .env
 claude login
 ./start.sh
 ```
@@ -495,7 +492,8 @@ claude login
 ```bash
 git clone https://github.com/nek1987/auto-agent-harness.git
 cd auto-agent-harness
-./scripts/setup-docker-auth.sh --api-key
+cp .env.docker.example .env
+# Edit .env: add ANTHROPIC_API_KEY, generate JWT_SECRET_KEY
 docker-compose up -d --build
 ```
 
@@ -512,3 +510,11 @@ rsync -avz . user@server:/opt/autocoder/auto-agent-harness/
 cd /opt/autocoder/auto-agent-harness
 docker-compose up -d --build
 ```
+
+---
+
+## Related Documentation
+
+- [Configuration Reference](CONFIGURATION.md) - All environment variables
+- [README](../README.md) - Project overview and quick start
+- [CLAUDE.md](../CLAUDE.md) - Claude Code integration
