@@ -1,0 +1,91 @@
+# ============================================================================
+# Auto-Agent-Harness Docker Compose
+# ============================================================================
+# Production deployment configuration
+
+services:
+  auto-agent-harness:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auto-agent-harness
+    restart: unless-stopped
+
+    ports:
+      - "${PORT:-8888}:8888"
+
+    environment:
+      # Authentication
+      - AUTH_ENABLED=${AUTH_ENABLED:-true}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-admin}
+
+      # Path security
+      - ALLOWED_ROOT_DIRECTORY=/workspace
+      - DATA_DIR=/app/data
+      - REQUIRE_LOCALHOST=false
+
+      # Server
+      - HOST=0.0.0.0
+      - PORT=8888
+
+      # Webhooks (optional)
+      - PROGRESS_N8N_WEBHOOK_URL=${PROGRESS_N8N_WEBHOOK_URL:-}
+
+    volumes:
+      # Persistent data storage
+      - autocoder-data:/app/data
+
+      # Workspace for projects
+      - ${WORKSPACE_DIR:-./workspace}:/workspace
+
+      # Optional: Claude CLI credentials (if using local auth)
+      # - ~/.claude:/home/autocoder/.claude:ro
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp
+
+volumes:
+  autocoder-data:
+    driver: local
+
+# ============================================================================
+# Usage Examples
+# ============================================================================
+#
+# 1. Start the service:
+#    docker-compose up -d
+#
+# 2. Start with custom workspace directory:
+#    WORKSPACE_DIR=/path/to/projects docker-compose up -d
+#
+# 3. View logs:
+#    docker-compose logs -f
+#
+# 4. Stop the service:
+#    docker-compose down
+#
+# 5. Rebuild after code changes:
+#    docker-compose build --no-cache
+#    docker-compose up -d
+#
+# ============================================================================

@@ -1,0 +1,27 @@
+# Core
+claude-agent-sdk>=0.1.0
+python-dotenv>=1.0.0
+sqlalchemy>=2.0.0
+
+# Web
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+websockets>=13.0
+python-multipart>=0.0.17
+
+# Authentication
+bcrypt>=4.0.0
+PyJWT>=2.8.0
+
+# Rate limiting
+slowapi>=0.1.9
+
+# Utilities
+psutil>=6.0.0
+aiofiles>=24.0.0
+
+# Dev dependencies
+ruff>=0.8.0
+mypy>=1.13.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
