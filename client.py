@@ -8,6 +8,9 @@ Updated for Claude Code v2.1.1 / SDK 0.1.19 features:
 - Enhanced hooks (PostToolUse, SessionStart, SessionEnd)
 - Improved tool logging
 - Skills integration via setting_sources
+
+Security enhancements:
+- Environment variable allowlist for MCP servers (prevents credential leakage)
 """
 
 import json
@@ -17,11 +20,69 @@ import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional, Dict
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import HookMatcher
 
 from security import bash_security_hook
+
+
+# ============================================================================
+# Environment Allowlist (Security)
+# ============================================================================
+
+# Only these environment variables are passed to MCP servers
+# This prevents credential leakage from parent process
+ALLOWED_MCP_ENV_VARS = frozenset([
+    # Required for Claude SDK
+    "ANTHROPIC_API_KEY",
+    # System paths
+    "PATH",
+    "HOME",
+    "USER",
+    "SHELL",
+    # Locale settings
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    # Terminal settings
+    "TERM",
+    "COLORTERM",
+    # Python-specific
+    "PYTHONPATH",
+    "PYTHONIOENCODING",
+    # Project-specific (added dynamically)
+    "PROJECT_DIR",
+])
+
+
+def build_safe_mcp_env(extra_vars: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """
+    Build a safe environment dictionary for MCP servers.
+
+    Only includes variables from the allowlist plus any explicitly
+    provided extra variables. This prevents accidental credential
+    leakage from the parent process environment.
+
+    Args:
+        extra_vars: Additional variables to include (e.g., PROJECT_DIR)
+
+    Returns:
+        Dictionary of safe environment variables
+    """
+    env = {}
+
+    # Add allowed variables from current environment
+    for key in ALLOWED_MCP_ENV_VARS:
+        if key in os.environ:
+            env[key] = os.environ[key]
+
+    # Add explicit extra variables
+    if extra_vars:
+        env.update(extra_vars)
+
+    return env
 
 # Logger for tool execution tracking
 logger = logging.getLogger(__name__)
@@ -229,17 +290,15 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         print("   - Warning: System Claude CLI not found, using bundled CLI")
 
     # Build MCP servers config - features is always included, playwright only in standard mode
+    # Uses build_safe_mcp_env() to prevent credential leakage (only allowlisted vars)
     mcp_servers = {
         "features": {
             "command": sys.executable,  # Use the same Python that's running this script
             "args": ["-m", "mcp_server.feature_mcp"],
-            "env": {
-                # Inherit parent environment (PATH, ANTHROPIC_API_KEY, etc.)
-                **os.environ,
-                # Add custom variables
+            "env": build_safe_mcp_env({
                 "PROJECT_DIR": str(project_dir.resolve()),
                 "PYTHONPATH": str(Path(__file__).parent.resolve()),
-            },
+            }),
         },
     }
     if not yolo_mode:

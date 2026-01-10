@@ -3,13 +3,19 @@ Agent Session Logic
 ===================
 
 Core agent interaction functions for running autonomous coding sessions.
+
+Includes:
+- Error classification for intelligent error handling
+- Failure tracking with auto-pause on repeated failures
+- User-friendly error messages
 """
 
 import asyncio
 import io
+import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 
 from claude_agent_sdk import ClaudeSDKClient
 
@@ -28,6 +34,15 @@ from prompts import (
     get_initializer_prompt,
     load_prompt,
 )
+from lib import (
+    classify_error,
+    get_user_friendly_message,
+    FailureTracker,
+    FailureStats,
+    ErrorInfo,
+)
+
+logger = logging.getLogger(__name__)
 
 # Configuration
 AUTO_CONTINUE_DELAY_SECONDS = 3
@@ -37,7 +52,7 @@ async def run_agent_session(
     client: ClaudeSDKClient,
     message: str,
     project_dir: Path,
-) -> tuple[str, str]:
+) -> tuple[str, str, Optional[ErrorInfo]]:
     """
     Run a single agent session using Claude Agent SDK.
 
@@ -47,9 +62,10 @@ async def run_agent_session(
         project_dir: Project directory path
 
     Returns:
-        (status, response_text) where status is:
-        - "continue" if agent should continue working
-        - "error" if an error occurred
+        (status, response_text, error_info) where:
+        - status: "continue" if agent should continue, "error" if an error occurred
+        - response_text: The response text from the agent
+        - error_info: Classified error info if an error occurred, None otherwise
     """
     print("Sending prompt to Claude Agent SDK...\n")
 
@@ -100,11 +116,31 @@ async def run_agent_session(
                             print("   [Done]", flush=True)
 
         print("\n" + "-" * 70 + "\n")
-        return "continue", response_text
+        return "continue", response_text, None
 
     except Exception as e:
-        print(f"Error during agent session: {e}")
-        return "error", str(e)
+        # Classify the error for intelligent handling
+        error_info = classify_error(e)
+        user_message = get_user_friendly_message(error_info)
+
+        print(f"\nError during agent session: {user_message}")
+        logger.error(f"Agent error: {error_info.type.value} - {error_info.message}")
+
+        return "error", str(e), error_info
+
+
+def _default_pause_callback(stats: FailureStats, error_info: ErrorInfo) -> None:
+    """Default callback when failure tracker triggers a pause."""
+    print("\n" + "=" * 70)
+    print("  AUTO-PAUSE TRIGGERED")
+    print("=" * 70)
+    print(f"\nReason: {stats.pause_reason}")
+    print(f"Failures in window: {stats.failures_in_window}")
+    print(f"Total failures: {stats.total_failures}")
+    if error_info.retry_after:
+        print(f"Suggested wait time: {error_info.retry_after} seconds")
+    print("\nTo resume, run the agent again.")
+    print("=" * 70 + "\n")
 
 
 async def run_autonomous_agent(
@@ -113,6 +149,7 @@ async def run_autonomous_agent(
     max_iterations: Optional[int] = None,
     yolo_mode: bool = False,
     mode: Optional[str] = None,
+    on_pause: Optional[Callable[[FailureStats, ErrorInfo], None]] = None,
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -123,7 +160,13 @@ async def run_autonomous_agent(
         max_iterations: Maximum number of iterations (None for unlimited)
         yolo_mode: If True, skip browser testing and use YOLO prompt
         mode: Force specific mode ("initializer", "coding", "analysis", or None for auto-detect)
+        on_pause: Optional callback when auto-pause is triggered due to failures
     """
+    # Initialize failure tracker with callback
+    failure_tracker = FailureTracker(
+        on_pause_triggered=on_pause or _default_pause_callback
+    )
+
     print("\n" + "=" * 70)
     print("  AUTONOMOUS CODING AGENT DEMO")
     print("=" * 70)
@@ -220,18 +263,33 @@ async def run_autonomous_agent(
 
         # Run session with async context manager
         async with client:
-            status, response = await run_agent_session(client, prompt, project_dir)
+            status, response, error_info = await run_agent_session(client, prompt, project_dir)
 
         # Handle status
         if status == "continue":
+            # Record success to reset failure count
+            failure_tracker.record_success()
+
             print(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
             print_progress_summary(project_dir)
             await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
 
         elif status == "error":
+            # Track the failure and check if we should pause
+            if error_info and failure_tracker.track_failure(error_info):
+                # Failure tracker has triggered pause - exit the loop
+                print("\nAgent paused due to repeated failures.")
+                break
+
+            # Not paused yet - retry with fresh session
             print("\nSession encountered an error")
             print("Will retry with a fresh session...")
-            await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
+
+            # Use retry_after if available, otherwise default delay
+            delay = error_info.retry_after if error_info and error_info.retry_after else AUTO_CONTINUE_DELAY_SECONDS
+            if error_info and error_info.is_rate_limit:
+                print(f"Rate limit detected - waiting {delay} seconds before retry...")
+            await asyncio.sleep(delay)
 
         # Small delay between sessions
         if max_iterations is None or iteration < max_iterations:
@@ -240,20 +298,31 @@ async def run_autonomous_agent(
 
     # Final summary
     print("\n" + "=" * 70)
-    print("  SESSION COMPLETE")
+    if failure_tracker.is_paused:
+        print("  SESSION PAUSED")
+    else:
+        print("  SESSION COMPLETE")
     print("=" * 70)
     print(f"\nProject directory: {project_dir}")
     print_progress_summary(project_dir)
 
+    # Print failure stats if any failures occurred
+    stats = failure_tracker.get_stats()
+    if stats.total_failures > 0:
+        print(f"\nFailure stats: {stats.total_failures} total failures")
+        if stats.paused_due_to_failures:
+            print(f"  Paused: {stats.pause_reason}")
+
     # Print instructions for running the generated application
-    print("\n" + "-" * 70)
-    print("  TO RUN THE GENERATED APPLICATION:")
-    print("-" * 70)
-    print(f"\n  cd {project_dir.resolve()}")
-    print("  ./init.sh           # Run the setup script")
-    print("  # Or manually:")
-    print("  npm install && npm run dev")
-    print("\n  Then open http://localhost:3000 (or check init.sh for the URL)")
-    print("-" * 70)
+    if not failure_tracker.is_paused:
+        print("\n" + "-" * 70)
+        print("  TO RUN THE GENERATED APPLICATION:")
+        print("-" * 70)
+        print(f"\n  cd {project_dir.resolve()}")
+        print("  ./init.sh           # Run the setup script")
+        print("  # Or manually:")
+        print("  npm install && npm run dev")
+        print("\n  Then open http://localhost:3000 (or check init.sh for the URL)")
+        print("-" * 70)
 
     print("\nDone!")
