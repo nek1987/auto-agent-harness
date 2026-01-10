@@ -27,6 +27,7 @@ from .routers import (
     filesystem_router,
     projects_router,
     spec_creation_router,
+    spec_import_router,
 )
 from .routers.auth import get_current_user
 from .schemas import SetupStatus
@@ -140,6 +141,7 @@ app.include_router(projects_router)
 app.include_router(features_router)
 app.include_router(agent_router)
 app.include_router(spec_creation_router)
+app.include_router(spec_import_router)
 app.include_router(filesystem_router)
 app.include_router(assistant_chat_router)
 

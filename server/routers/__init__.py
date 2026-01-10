@@ -12,6 +12,7 @@ from .features import router as features_router
 from .filesystem import router as filesystem_router
 from .projects import router as projects_router
 from .spec_creation import router as spec_creation_router
+from .spec_import import router as spec_import_router
 
 __all__ = [
     "auth_router",
@@ -19,6 +20,7 @@ __all__ = [
     "features_router",
     "agent_router",
     "spec_creation_router",
+    "spec_import_router",
     "filesystem_router",
     "assistant_chat_router",
 ]

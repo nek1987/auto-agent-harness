@@ -17,13 +17,20 @@ Skills integration (SDK 0.1.19):
 - Skills from .claude/skills/ are loaded and injected into prompts
 - {{SKILLS_CONTEXT}} placeholder is replaced with relevant skills
 - Skills are selected based on agent mode (analysis, coding, frontend, etc.)
+
+Spec Validation:
+- validate_spec_structure() validates XML structure of app_spec.txt
+- extract_spec_metadata() extracts project_name, feature_count, tech_stack
+- get_spec_quality_score() returns quality score 0-100
 """
 
 import json
+import re
 import shutil
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from lib.skills_loader import SkillsLoader, get_skills_context
 
@@ -516,3 +523,352 @@ def update_spec_feature_range(
             break
 
     save_spec_manifest(project_dir, manifest)
+
+
+# ============================================================================
+# Spec Validation
+# ============================================================================
+
+@dataclass
+class SpecValidationResult:
+    """Result of validating an app_spec.txt file."""
+
+    is_valid: bool
+    score: int  # 0-100
+
+    # Presence of required sections
+    has_project_name: bool = False
+    has_overview: bool = False
+    has_tech_stack: bool = False
+    has_feature_count: bool = False
+    has_core_features: bool = False
+    has_database_schema: bool = False
+    has_api_endpoints: bool = False
+    has_implementation_steps: bool = False
+    has_success_criteria: bool = False
+
+    # Extracted data
+    project_name: Optional[str] = None
+    feature_count: Optional[int] = None
+    tech_stack: Optional[dict] = None
+
+    # Issues
+    missing_sections: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "is_valid": self.is_valid,
+            "score": self.score,
+            "has_project_name": self.has_project_name,
+            "has_overview": self.has_overview,
+            "has_tech_stack": self.has_tech_stack,
+            "has_feature_count": self.has_feature_count,
+            "has_core_features": self.has_core_features,
+            "has_database_schema": self.has_database_schema,
+            "has_api_endpoints": self.has_api_endpoints,
+            "has_implementation_steps": self.has_implementation_steps,
+            "has_success_criteria": self.has_success_criteria,
+            "project_name": self.project_name,
+            "feature_count": self.feature_count,
+            "tech_stack": self.tech_stack,
+            "missing_sections": self.missing_sections,
+            "warnings": self.warnings,
+            "errors": self.errors,
+        }
+
+
+# Section patterns for validation
+REQUIRED_SECTIONS = {
+    "project_specification": (r"<project_specification>", "Root <project_specification> tag"),
+    "project_name": (r"<project_name>(.+?)</project_name>", "Project name"),
+    "overview": (r"<overview>(.+?)</overview>", "Project overview"),
+    "technology_stack": (r"<technology_stack>(.+?)</technology_stack>", "Technology stack"),
+    "feature_count": (r"<feature_count>(\d+)</feature_count>", "Feature count"),
+    "core_features": (r"<core_features>(.+?)</core_features>", "Core features"),
+}
+
+OPTIONAL_SECTIONS = {
+    "database_schema": (r"<database_schema>(.+?)</database_schema>", "Database schema"),
+    "api_endpoints": (r"<api_endpoints_summary>(.+?)</api_endpoints_summary>", "API endpoints"),
+    "implementation_steps": (r"<implementation_steps>(.+?)</implementation_steps>", "Implementation steps"),
+    "success_criteria": (r"<success_criteria>(.+?)</success_criteria>", "Success criteria"),
+}
+
+
+def validate_spec_structure(spec_content: str) -> SpecValidationResult:
+    """
+    Validate the XML structure of an app_spec.txt file.
+
+    Checks for:
+    - Required sections (project_specification, project_name, overview, tech_stack, etc.)
+    - Optional sections (database_schema, api_endpoints, etc.)
+    - Extracts metadata (project_name, feature_count, tech_stack)
+    - Calculates quality score based on completeness
+
+    Args:
+        spec_content: The content of the app_spec.txt file
+
+    Returns:
+        SpecValidationResult with validation details
+    """
+    result = SpecValidationResult(is_valid=True, score=0)
+
+    # Check for empty content
+    if not spec_content or not spec_content.strip():
+        result.is_valid = False
+        result.errors.append("Spec content is empty")
+        return result
+
+    # Check required sections
+    for section_name, (pattern, display_name) in REQUIRED_SECTIONS.items():
+        match = re.search(pattern, spec_content, re.DOTALL | re.IGNORECASE)
+        if match:
+            setattr(result, f"has_{section_name}", True)
+        else:
+            result.missing_sections.append(display_name)
+            if section_name == "project_specification":
+                result.errors.append(f"Missing required: {display_name}")
+                result.is_valid = False
+
+    # Check optional sections
+    for section_name, (pattern, display_name) in OPTIONAL_SECTIONS.items():
+        match = re.search(pattern, spec_content, re.DOTALL | re.IGNORECASE)
+        if match:
+            setattr(result, f"has_{section_name}", True)
+        else:
+            result.warnings.append(f"Optional section missing: {display_name}")
+
+    # Extract metadata
+    result.project_name, result.feature_count, result.tech_stack = extract_spec_metadata(spec_content)
+
+    # Validate extracted data
+    if result.has_feature_count and result.feature_count is not None:
+        if result.feature_count < 1:
+            result.errors.append("Feature count must be at least 1")
+            result.is_valid = False
+        elif result.feature_count > 500:
+            result.warnings.append(f"Very high feature count ({result.feature_count}) - may be unrealistic")
+
+    # Check for minimum content length
+    if len(spec_content.strip()) < 500:
+        result.warnings.append("Spec content is very short - may lack detail")
+
+    # Calculate quality score
+    result.score = get_spec_quality_score(result)
+
+    return result
+
+
+def extract_spec_metadata(spec_content: str) -> tuple[Optional[str], Optional[int], Optional[dict]]:
+    """
+    Extract metadata from spec content.
+
+    Args:
+        spec_content: The content of the app_spec.txt file
+
+    Returns:
+        Tuple of (project_name, feature_count, tech_stack)
+    """
+    project_name = None
+    feature_count = None
+    tech_stack = None
+
+    # Extract project name
+    name_match = re.search(r"<project_name>(.+?)</project_name>", spec_content, re.DOTALL | re.IGNORECASE)
+    if name_match:
+        project_name = name_match.group(1).strip()
+
+    # Extract feature count
+    count_match = re.search(r"<feature_count>(\d+)</feature_count>", spec_content, re.IGNORECASE)
+    if count_match:
+        try:
+            feature_count = int(count_match.group(1))
+        except ValueError:
+            pass
+
+    # Extract technology stack
+    tech_match = re.search(r"<technology_stack>(.+?)</technology_stack>", spec_content, re.DOTALL | re.IGNORECASE)
+    if tech_match:
+        tech_content = tech_match.group(1)
+        tech_stack = {}
+
+        # Try to extract frontend/backend
+        frontend_match = re.search(r"<frontend>(.+?)</frontend>", tech_content, re.DOTALL | re.IGNORECASE)
+        if frontend_match:
+            tech_stack["frontend"] = frontend_match.group(1).strip()
+
+        backend_match = re.search(r"<backend>(.+?)</backend>", tech_content, re.DOTALL | re.IGNORECASE)
+        if backend_match:
+            tech_stack["backend"] = backend_match.group(1).strip()
+
+        database_match = re.search(r"<database>(.+?)</database>", tech_content, re.DOTALL | re.IGNORECASE)
+        if database_match:
+            tech_stack["database"] = database_match.group(1).strip()
+
+    return project_name, feature_count, tech_stack
+
+
+def get_spec_quality_score(result: SpecValidationResult) -> int:
+    """
+    Calculate quality score for a spec validation result.
+
+    Scoring breakdown:
+    - Required sections (60 points): 10 each
+    - Optional sections (30 points): 7.5 each
+    - No errors (10 points)
+
+    Args:
+        result: SpecValidationResult from validation
+
+    Returns:
+        Score from 0-100
+    """
+    score = 0
+
+    # Required sections (10 points each, max 60)
+    required_checks = [
+        result.has_project_name,
+        result.has_overview,
+        result.has_tech_stack,
+        result.has_feature_count,
+        result.has_core_features,
+        hasattr(result, 'has_project_specification') and getattr(result, 'has_project_specification', False),
+    ]
+    score += sum(10 for check in required_checks if check)
+
+    # Optional sections (7.5 points each, max 30)
+    optional_checks = [
+        result.has_database_schema,
+        result.has_api_endpoints,
+        result.has_implementation_steps,
+        result.has_success_criteria,
+    ]
+    score += sum(7.5 for check in optional_checks if check)
+
+    # No errors bonus (10 points)
+    if not result.errors:
+        score += 10
+
+    return min(100, int(score))
+
+
+def import_spec_file(
+    project_dir: Path,
+    spec_path: Path,
+    validate: bool = True,
+    spec_name: str = "main",
+) -> tuple[Path, Optional[SpecValidationResult]]:
+    """
+    Import an existing spec file into a project.
+
+    Args:
+        project_dir: The project directory
+        spec_path: Path to the spec file to import
+        validate: Whether to validate the spec before importing
+        spec_name: Name for this spec in the manifest
+
+    Returns:
+        Tuple of (destination_path, validation_result or None)
+
+    Raises:
+        FileNotFoundError: If spec file doesn't exist
+        ValueError: If validation fails and validate=True
+    """
+    if not spec_path.exists():
+        raise FileNotFoundError(f"Spec file not found: {spec_path}")
+
+    # Read the spec content
+    content = spec_path.read_text(encoding="utf-8")
+
+    # Validate if requested
+    validation_result = None
+    if validate:
+        validation_result = validate_spec_structure(content)
+        if not validation_result.is_valid:
+            error_msg = "; ".join(validation_result.errors)
+            raise ValueError(f"Spec validation failed: {error_msg}")
+
+    # Create prompts directory
+    project_prompts = get_project_prompts_dir(project_dir)
+    project_prompts.mkdir(parents=True, exist_ok=True)
+
+    # Determine destination filename
+    if spec_name == "main":
+        dest_filename = "app_spec.txt"
+    else:
+        dest_filename = f"app_spec_{spec_name}.txt"
+
+    dest_path = project_prompts / dest_filename
+
+    # Copy the spec file
+    shutil.copy(spec_path, dest_path)
+
+    # Register in manifest
+    feature_count = validation_result.feature_count if validation_result else 0
+    register_spec(
+        project_dir=project_dir,
+        spec_name=spec_name,
+        spec_file=dest_filename,
+        feature_count=feature_count or 0,
+    )
+
+    return dest_path, validation_result
+
+
+def import_spec_content(
+    project_dir: Path,
+    content: str,
+    validate: bool = True,
+    spec_name: str = "main",
+) -> tuple[Path, Optional[SpecValidationResult]]:
+    """
+    Import spec content directly into a project.
+
+    Args:
+        project_dir: The project directory
+        content: The spec content to import
+        validate: Whether to validate the spec before importing
+        spec_name: Name for this spec in the manifest
+
+    Returns:
+        Tuple of (destination_path, validation_result or None)
+
+    Raises:
+        ValueError: If validation fails and validate=True
+    """
+    # Validate if requested
+    validation_result = None
+    if validate:
+        validation_result = validate_spec_structure(content)
+        if not validation_result.is_valid:
+            error_msg = "; ".join(validation_result.errors)
+            raise ValueError(f"Spec validation failed: {error_msg}")
+
+    # Create prompts directory
+    project_prompts = get_project_prompts_dir(project_dir)
+    project_prompts.mkdir(parents=True, exist_ok=True)
+
+    # Determine destination filename
+    if spec_name == "main":
+        dest_filename = "app_spec.txt"
+    else:
+        dest_filename = f"app_spec_{spec_name}.txt"
+
+    dest_path = project_prompts / dest_filename
+
+    # Write the spec content
+    dest_path.write_text(content, encoding="utf-8")
+
+    # Register in manifest
+    feature_count = validation_result.feature_count if validation_result else 0
+    register_spec(
+        project_dir=project_dir,
+        spec_name=spec_name,
+        spec_file=dest_filename,
+        feature_count=feature_count or 0,
+    )
+
+    return dest_path, validation_result

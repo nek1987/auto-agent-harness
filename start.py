@@ -17,6 +17,8 @@ from prompts import (
     get_project_prompts_dir,
     has_project_prompts,
     scaffold_project_prompts,
+    validate_spec_structure,
+    import_spec_file,
 )
 from registry import (
     get_project_path,
@@ -83,6 +85,7 @@ def display_menu(projects: list[tuple[str, Path]]) -> None:
         print("[2] Continue existing project")
 
     print("[3] Import existing project")
+    print("[4] Import spec file to project")
     print("[q] Quit")
     print()
 
@@ -563,6 +566,227 @@ def run_analysis_mode(project_name: str, project_dir: Path) -> bool:
         return False
 
 
+def import_spec_to_project_flow(projects: list[tuple[str, Path]]) -> tuple[str, Path] | None:
+    """
+    Import an existing app_spec.txt file to a project.
+
+    Flow:
+    1. Select or create project
+    2. Enter path to spec file
+    3. Validate spec
+    4. Show validation report
+    5. Optionally analyze with Claude
+    6. Import spec to project
+    7. Return (name, path) tuple if successful
+    """
+    print("\n" + "-" * 50)
+    print("  Import Spec File")
+    print("-" * 50)
+    print("\nImport an existing app_spec.txt file into a project.")
+    print("The spec will be validated and optionally analyzed with Claude.\n")
+
+    # Step 1: Select or create project
+    print("Select target project:")
+    print("\n[1] Choose from existing projects")
+    print("[2] Create new project for spec")
+    print("[b] Back to main menu")
+    print()
+
+    choice = input("Select [1/2/b]: ").strip().lower()
+
+    if choice == 'b':
+        return None
+
+    project_name = None
+    project_dir = None
+
+    if choice == '1':
+        if not projects:
+            print("\nNo existing projects. Creating new project...")
+            project_info = get_new_project_info()
+            if not project_info:
+                return None
+            project_name, project_dir = project_info
+            ensure_project_scaffolded(project_name, project_dir)
+        else:
+            display_projects(projects)
+            selected = get_project_choice(projects)
+            if selected:
+                project_name, project_dir = selected
+            else:
+                return None
+    elif choice == '2':
+        project_info = get_new_project_info()
+        if not project_info:
+            return None
+        project_name, project_dir = project_info
+        ensure_project_scaffolded(project_name, project_dir)
+    else:
+        print("Invalid choice.")
+        return None
+
+    # Step 2: Get spec file path
+    print("\n" + "-" * 40)
+    print(f"Importing spec to: {project_name}")
+    print("-" * 40)
+    print("\nEnter the path to your app_spec.txt file:")
+    print("(Leave empty to cancel)")
+    print()
+
+    spec_path_str = input("Spec file path: ").strip()
+    if not spec_path_str:
+        return None
+
+    spec_path = Path(spec_path_str)
+    if not spec_path.is_absolute():
+        spec_path = Path.cwd() / spec_path
+
+    if not spec_path.exists():
+        print(f"\nError: File not found: {spec_path}")
+        return None
+
+    # Step 3: Read and validate
+    try:
+        spec_content = spec_path.read_text(encoding="utf-8")
+    except Exception as e:
+        print(f"\nError reading spec file: {e}")
+        return None
+
+    validation = validate_spec_structure(spec_content)
+
+    # Step 4: Show validation report
+    print("\n" + "=" * 50)
+    print("  SPEC VALIDATION REPORT")
+    print("=" * 50)
+
+    # Score with status
+    if validation.score >= 80:
+        status = "EXCELLENT"
+    elif validation.score >= 60:
+        status = "GOOD"
+    elif validation.score >= 40:
+        status = "FAIR"
+    else:
+        status = "NEEDS WORK"
+
+    print(f"\nQuality Score: {validation.score}/100 ({status})")
+    print(f"Valid: {'Yes' if validation.is_valid else 'No'}")
+
+    if validation.project_name:
+        print(f"Project Name: {validation.project_name}")
+    if validation.feature_count:
+        print(f"Feature Count: {validation.feature_count}")
+
+    # Sections checklist
+    print("\n--- Required Sections ---")
+    sections = [
+        ("Project Name", validation.has_project_name),
+        ("Overview", validation.has_overview),
+        ("Tech Stack", validation.has_tech_stack),
+        ("Feature Count", validation.has_feature_count),
+        ("Core Features", validation.has_core_features),
+    ]
+    for name, present in sections:
+        icon = "[+]" if present else "[ ]"
+        print(f"  {icon} {name}")
+
+    print("\n--- Optional Sections ---")
+    optional = [
+        ("Database Schema", validation.has_database_schema),
+        ("API Endpoints", validation.has_api_endpoints),
+        ("Implementation Steps", validation.has_implementation_steps),
+        ("Success Criteria", validation.has_success_criteria),
+    ]
+    for name, present in optional:
+        icon = "[+]" if present else "[ ]"
+        print(f"  {icon} {name}")
+
+    if validation.errors:
+        print("\n--- Errors ---")
+        for error in validation.errors:
+            print(f"  [!] {error}")
+
+    if validation.warnings:
+        print("\n--- Warnings ---")
+        for warning in validation.warnings:
+            print(f"  [?] {warning}")
+
+    print("=" * 50)
+
+    # Check if spec is valid
+    if not validation.is_valid:
+        print("\nSpec validation failed. Please fix the errors and try again.")
+        return None
+
+    # Step 5: Ask about Claude analysis
+    print("\nOptions:")
+    print("[1] Import spec as-is")
+    print("[2] Analyze with Claude first (recommended)")
+    print("[3] Cancel")
+    print()
+
+    import_choice = input("Select [1/2/3]: ").strip()
+
+    if import_choice == '3':
+        return None
+
+    if import_choice == '2':
+        print("\nAnalyzing with Claude...")
+        try:
+            from server.services.spec_analyzer import SpecAnalyzer
+            import asyncio
+
+            async def do_analysis():
+                analyzer = SpecAnalyzer()
+                return await analyzer.analyze(spec_content)
+
+            analysis = asyncio.run(do_analysis())
+
+            print("\n--- Claude Analysis ---")
+            if analysis.strengths:
+                print("\nStrengths:")
+                for s in analysis.strengths:
+                    print(f"  [+] {s}")
+
+            if analysis.improvements:
+                print("\nSuggested Improvements:")
+                for i in analysis.improvements:
+                    print(f"  [?] {i}")
+
+            if analysis.critical_issues:
+                print("\nCritical Issues:")
+                for c in analysis.critical_issues:
+                    print(f"  [!] {c}")
+
+            print("-" * 50)
+
+            if analysis.critical_issues:
+                print("\nWarning: Claude identified critical issues.")
+                proceed = input("Continue with import anyway? [y/N]: ").strip().lower()
+                if proceed != 'y':
+                    return None
+
+        except Exception as e:
+            print(f"\nClaude analysis failed: {e}")
+            print("Continuing with local validation only...")
+
+    # Step 6: Import the spec
+    try:
+        dest_path, _ = import_spec_file(
+            project_dir=project_dir,
+            spec_path=spec_path,
+            validate=False,  # Already validated
+            spec_name="main",
+        )
+        print(f"\nSpec imported successfully to: {dest_path}")
+
+        return project_name, project_dir
+
+    except Exception as e:
+        print(f"\nError importing spec: {e}")
+        return None
+
+
 def run_agent(project_name: str, project_dir: Path) -> None:
     """Run the autonomous agent with the given project.
 
@@ -649,6 +873,34 @@ def main() -> None:
                         print("\nError: 'claude' command not found.")
                     except KeyboardInterrupt:
                         print("\n\nSpec addition cancelled.")
+
+        elif choice == '4':
+            result = import_spec_to_project_flow(projects)
+            if result:
+                project_name, project_dir = result
+                # Ask if user wants to run agent now
+                print("\n" + "-" * 40)
+                print("  Next Steps")
+                print("-" * 40)
+                print("\n[1] Run agent now (initializer mode)")
+                print("[2] Return to main menu")
+                next_choice = input("\nSelect [1/2]: ").strip()
+
+                if next_choice == '1':
+                    # Run with initializer mode after spec import
+                    print(f"\nStarting agent for project: {project_name}")
+                    print(f"Location: {project_dir}")
+                    print("-" * 50)
+                    cmd = [
+                        sys.executable,
+                        "autonomous_agent_demo.py",
+                        "--project-dir", str(project_dir.resolve()),
+                        "--mode", "initializer"
+                    ]
+                    try:
+                        subprocess.run(cmd, check=False)
+                    except KeyboardInterrupt:
+                        print("\n\nAgent interrupted. Run again to resume.")
 
         else:
             print("Invalid option. Please try again.")

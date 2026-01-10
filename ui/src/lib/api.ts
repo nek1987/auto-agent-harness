@@ -279,3 +279,119 @@ export async function deleteAssistantConversation(
     { method: 'DELETE' }
   )
 }
+
+// ============================================================================
+// Spec Import API
+// ============================================================================
+
+export interface SpecValidationResponse {
+  is_valid: boolean
+  score: number
+  has_project_name: boolean
+  has_overview: boolean
+  has_tech_stack: boolean
+  has_feature_count: boolean
+  has_core_features: boolean
+  has_database_schema: boolean
+  has_api_endpoints: boolean
+  has_implementation_steps: boolean
+  has_success_criteria: boolean
+  project_name: string | null
+  feature_count: number | null
+  tech_stack: Record<string, string> | null
+  missing_sections: string[]
+  warnings: string[]
+  errors: string[]
+}
+
+export interface SpecAnalysisResponse {
+  validation: SpecValidationResponse
+  strengths: string[]
+  improvements: string[]
+  critical_issues: string[]
+  suggested_changes: Record<string, unknown> | null
+  analysis_model: string
+  analysis_timestamp: string
+}
+
+export interface SpecImportResponse {
+  success: boolean
+  path: string
+  validation: SpecValidationResponse | null
+  message: string
+}
+
+export interface SpecRefineResponse {
+  success: boolean
+  refined_spec: string
+  message: string
+}
+
+export async function validateSpec(specContent: string): Promise<SpecValidationResponse> {
+  return fetchJSON('/spec/validate', {
+    method: 'POST',
+    body: JSON.stringify({ spec_content: specContent }),
+  })
+}
+
+export async function analyzeSpec(specContent: string): Promise<SpecAnalysisResponse> {
+  return fetchJSON('/spec/analyze', {
+    method: 'POST',
+    body: JSON.stringify({ spec_content: specContent }),
+  })
+}
+
+export async function importSpecToProject(
+  projectName: string,
+  specContent: string,
+  specName: string = 'main',
+  validate: boolean = true
+): Promise<SpecImportResponse> {
+  return fetchJSON(`/spec/import/${encodeURIComponent(projectName)}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      spec_content: specContent,
+      spec_name: specName,
+      validate,
+    }),
+  })
+}
+
+export async function uploadSpecFile(
+  projectName: string,
+  file: File,
+  validate: boolean = true,
+  specName: string = 'main'
+): Promise<SpecImportResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const params = new URLSearchParams()
+  params.set('validate', String(validate))
+  params.set('spec_name', specName)
+
+  const response = await fetch(
+    `${API_BASE}/spec/upload/${encodeURIComponent(projectName)}?${params}`,
+    {
+      method: 'POST',
+      body: formData,
+    }
+  )
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(error.detail || `HTTP ${response.status}`)
+  }
+
+  return response.json()
+}
+
+export async function refineSpec(
+  specContent: string,
+  feedback: string
+): Promise<SpecRefineResponse> {
+  return fetchJSON('/spec/refine', {
+    method: 'POST',
+    body: JSON.stringify({ spec_content: specContent, feedback }),
+  })
+}
