@@ -12,6 +12,7 @@ A production-ready autonomous coding agent system with a React-based UI. Built o
 
 - **Two-Agent Pattern** - Initializer creates features, Coding agent implements them
 - **Real-time Web UI** - Kanban board with live progress via WebSocket
+- **Bug System** - Report bugs via UI, AI agent analyzes and creates fix features automatically
 - **JWT Authentication** - Secure httpOnly cookies with refresh token rotation
 - **Path Isolation** - Sandbox file operations to allowed directories
 - **Loop Detection** - Prevents infinite loops with 4 detection strategies
@@ -159,15 +160,39 @@ Access UI at `http://localhost:8888`
    - Implements and tests the feature
    - Marks as passing, repeats until all complete
 
+### Bug System
+
+Report bugs through the UI instead of manually reopening features:
+
+```
+User creates Bug → AI Agent analyzes → Creates fix features → Implements fixes → Bug resolved
+```
+
+**Workflow:**
+1. User clicks "Add Feature" and toggles to "Bug Report"
+2. Fills in bug description and steps to reproduce
+3. Bug gets priority 0 (highest) in the queue
+4. Agent analyzes bug with browser automation (reproduces it)
+5. Agent creates targeted fix features via `feature_create_bulk`
+6. Fix features are linked to parent bug via `parent_bug_id`
+7. When all fixes pass, bug is marked resolved
+
+**Bug Status Flow:** `open` → `analyzing` → `fixing` → `resolved`
+
 ### Feature Management (MCP Tools)
 
 ```python
-feature_get_stats      # Progress statistics
-feature_get_next       # Next pending feature (respects dependencies)
+# Feature Tools
+feature_get_stats           # Progress statistics
+feature_get_next            # Next pending feature (prioritizes bugs)
 feature_get_for_regression  # Random passing features for testing
-feature_mark_passing   # Mark feature complete
-feature_skip           # Move to end of queue
-feature_create_bulk    # Initialize all features
+feature_mark_passing        # Mark feature complete
+feature_skip                # Move to end of queue
+feature_create_bulk         # Initialize features (supports parent_bug_id)
+
+# Bug Tools
+bug_mark_resolved           # Mark bug as resolved (all fixes pass)
+bug_get_status              # Get bug details and linked fix features
 ```
 
 ### Protection Mechanisms
@@ -354,6 +379,17 @@ GET    /api/projects              # List all projects
 POST   /api/projects              # Create project
 GET    /api/projects/{name}       # Get project details
 DELETE /api/projects/{name}       # Delete project
+```
+
+### Features & Bugs
+
+```bash
+GET    /api/projects/{name}/features           # List all features
+POST   /api/projects/{name}/features           # Create feature (supports item_type: "bug")
+POST   /api/projects/{name}/features/bug       # Create bug report (priority 0)
+GET    /api/projects/{name}/features/{id}      # Get feature details
+DELETE /api/projects/{name}/features/{id}      # Delete feature
+PATCH  /api/projects/{name}/features/{id}/skip # Skip feature
 ```
 
 ### Agent Control

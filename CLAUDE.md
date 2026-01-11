@@ -128,11 +128,45 @@ Features are stored in SQLite (`features.db`) via SQLAlchemy. The agent interact
 
 MCP tools available to the agent:
 - `feature_get_stats` - Progress statistics
-- `feature_get_next` - Get highest-priority pending feature (respects dependencies)
+- `feature_get_next` - Get highest-priority pending feature (prioritizes bugs → fix features → regular features)
 - `feature_get_for_regression` - Random passing features for regression testing
 - `feature_mark_passing` - Mark feature complete
 - `feature_skip` - Move feature to end of queue
-- `feature_create_bulk` - Initialize all features (used by initializer)
+- `feature_create_bulk` - Initialize all features (supports `parent_bug_id` for bug fixes)
+- `bug_mark_resolved` - Mark bug as resolved when all fix features pass
+- `bug_get_status` - Get bug details and linked fix features
+
+### Bug System
+
+The Bug System allows users to report bugs through the UI. The AI agent analyzes bugs and automatically creates fix features.
+
+**Database Fields** (in `api/database.py`):
+- `item_type` - "feature" or "bug"
+- `parent_bug_id` - Links fix features to their parent bug
+- `bug_status` - "open", "analyzing", "fixing", "resolved"
+
+**Workflow:**
+```
+User creates Bug → Agent analyzes with browser automation →
+Agent creates fix features (feature_create_bulk with parent_bug_id) →
+Agent implements fixes → bug_mark_resolved
+```
+
+**Priority System:**
+1. Bugs get priority 0 (highest)
+2. Fix features (with parent_bug_id) processed next
+3. Regular features processed last
+
+**API Endpoints:**
+- `POST /api/projects/{name}/features` - Create feature or bug (via `item_type`)
+- `POST /api/projects/{name}/features/bug` - Create bug report directly
+
+**UI:**
+- `AddFeatureForm.tsx` - Toggle between Feature/Bug mode
+- Bug mode hides Category/Priority fields, shows "Steps to Reproduce"
+
+**Prompt Template:**
+- `.claude/templates/bug_analyzer_prompt.template.md` - Bug analysis workflow with browser automation
 
 ### Feature Dependencies
 
@@ -307,7 +341,10 @@ docker-compose logs -f
 - `.claude/commands/create-spec.md` - `/create-spec` slash command for interactive spec creation
 - `.claude/commands/add-spec.md` - `/add-spec` slash command to add specs to existing projects
 - `.claude/skills/frontend-design/SKILL.md` - Skill for distinctive UI design
-- `.claude/templates/` - Prompt templates copied to new projects
+- `.claude/templates/` - Prompt templates copied to new projects:
+  - `coding_prompt.template.md` - Main coding agent workflow
+  - `initializer_prompt.template.md` - Feature initialization workflow
+  - `bug_analyzer_prompt.template.md` - Bug analysis and fix feature creation
 
 ## Key Patterns
 
