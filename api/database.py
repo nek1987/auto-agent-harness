@@ -34,6 +34,11 @@ class Feature(Base):
     source_spec = Column(String(100), default="main", index=True)  # Which spec this feature came from
     dependencies = Column(JSON, nullable=True)  # List of feature IDs this depends on
 
+    # Bug System fields
+    item_type = Column(String(20), default="feature", index=True)  # "feature" or "bug"
+    parent_bug_id = Column(Integer, nullable=True, index=True)  # For fix features, reference to parent bug
+    bug_status = Column(String(20), nullable=True, index=True)  # "open", "analyzing", "fixing", "resolved"
+
     def to_dict(self) -> dict:
         """Convert feature to dictionary for JSON serialization."""
         return {
@@ -47,6 +52,9 @@ class Feature(Base):
             "in_progress": self.in_progress,
             "source_spec": self.source_spec,
             "dependencies": self.dependencies,
+            "item_type": self.item_type,
+            "parent_bug_id": self.parent_bug_id,
+            "bug_status": self.bug_status,
         }
 
 
@@ -86,6 +94,21 @@ def _migrate_database(engine) -> None:
         # Migration 3: Add dependencies column
         if "dependencies" not in columns:
             conn.execute(text("ALTER TABLE features ADD COLUMN dependencies JSON"))
+            conn.commit()
+
+        # Migration 4: Add item_type column for Bug System
+        if "item_type" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN item_type VARCHAR(20) DEFAULT 'feature'"))
+            conn.commit()
+
+        # Migration 5: Add parent_bug_id column for Bug System
+        if "parent_bug_id" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN parent_bug_id INTEGER"))
+            conn.commit()
+
+        # Migration 6: Add bug_status column for Bug System
+        if "bug_status" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN bug_status VARCHAR(20)"))
             conn.commit()
 
 

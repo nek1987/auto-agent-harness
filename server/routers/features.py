@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from ..schemas import (
+    BugCreate,
     FeatureCreate,
     FeatureListResponse,
     FeatureResponse,
@@ -90,6 +91,9 @@ def feature_to_response(f) -> FeatureResponse:
         steps=f.steps if isinstance(f.steps, list) else [],
         passes=f.passes,
         in_progress=f.in_progress,
+        item_type=getattr(f, 'item_type', 'feature') or 'feature',
+        parent_bug_id=getattr(f, 'parent_bug_id', None),
+        bug_status=getattr(f, 'bug_status', None),
     )
 
 
@@ -149,7 +153,7 @@ async def list_features(project_name: str):
 
 @router.post("", response_model=FeatureResponse)
 async def create_feature(project_name: str, feature: FeatureCreate):
-    """Create a new feature/test case manually."""
+    """Create a new feature/test case or bug report manually."""
     project_name = validate_project_name(project_name)
     project_dir = _get_project_path(project_name)
 
@@ -163,21 +167,27 @@ async def create_feature(project_name: str, feature: FeatureCreate):
 
     try:
         with get_db_session(project_dir) as session:
-            # Get next priority if not specified
-            if feature.priority is None:
+            is_bug = feature.item_type == "bug"
+
+            # Bugs always get priority 0 (highest), features get next available
+            if is_bug:
+                priority = 0
+            elif feature.priority is None:
                 max_priority = session.query(Feature).order_by(Feature.priority.desc()).first()
                 priority = (max_priority.priority + 1) if max_priority else 1
             else:
                 priority = feature.priority
 
-            # Create new feature
+            # Create new feature or bug
             db_feature = Feature(
                 priority=priority,
-                category=feature.category,
+                category="bug" if is_bug else feature.category,
                 name=feature.name,
                 description=feature.description,
                 steps=feature.steps,
                 passes=False,
+                item_type=feature.item_type,
+                bug_status="open" if is_bug else None,
             )
 
             session.add(db_feature)
@@ -190,6 +200,46 @@ async def create_feature(project_name: str, feature: FeatureCreate):
     except Exception:
         logger.exception("Failed to create feature")
         raise HTTPException(status_code=500, detail="Failed to create feature")
+
+
+@router.post("/bug", response_model=FeatureResponse)
+async def create_bug(project_name: str, bug: BugCreate):
+    """Create a bug report with high priority. Agent will analyze and create fix features."""
+    project_name = validate_project_name(project_name)
+    project_dir = _get_project_path(project_name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    _, Feature = _get_db_classes()
+
+    try:
+        with get_db_session(project_dir) as session:
+            # Bugs always have priority 0 (highest)
+            db_bug = Feature(
+                priority=0,
+                category="bug",
+                name=bug.name,
+                description=bug.description,
+                steps=bug.steps_to_reproduce if bug.steps_to_reproduce else ["Reproduce the bug"],
+                passes=False,
+                item_type="bug",
+                bug_status="open",
+            )
+
+            session.add(db_bug)
+            session.commit()
+            session.refresh(db_bug)
+
+            return feature_to_response(db_bug)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Failed to create bug")
+        raise HTTPException(status_code=500, detail="Failed to create bug")
 
 
 @router.get("/{feature_id}", response_model=FeatureResponse)

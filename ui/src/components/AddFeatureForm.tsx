@@ -1,5 +1,5 @@
 import { useState, useId } from 'react'
-import { X, Plus, Trash2, Loader2, AlertCircle } from 'lucide-react'
+import { X, Plus, Trash2, Loader2, AlertCircle, Bug, Sparkles } from 'lucide-react'
 import { useCreateFeature } from '../hooks/useProjects'
 
 interface Step {
@@ -14,6 +14,7 @@ interface AddFeatureFormProps {
 
 export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
   const formId = useId()
+  const [itemType, setItemType] = useState<'feature' | 'bug'>('feature')
   const [category, setCategory] = useState('')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -23,6 +24,7 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
   const [stepCounter, setStepCounter] = useState(1)
 
   const createFeature = useCreateFeature(projectName)
+  const isBug = itemType === 'bug'
 
   const handleAddStep = () => {
     setSteps([...steps, { id: `${formId}-step-${stepCounter}`, value: '' }])
@@ -50,19 +52,20 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
 
     try {
       await createFeature.mutateAsync({
-        category: category.trim(),
+        category: isBug ? 'bug' : category.trim(),
         name: name.trim(),
         description: description.trim(),
-        steps: filteredSteps,
-        priority: priority ? parseInt(priority, 10) : undefined,
+        steps: filteredSteps.length > 0 ? filteredSteps : (isBug ? ['Reproduce the bug'] : []),
+        priority: isBug ? 0 : (priority ? parseInt(priority, 10) : undefined),
+        item_type: itemType,
       })
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create feature')
+      setError(err instanceof Error ? err.message : 'Failed to create ' + (isBug ? 'bug' : 'feature'))
     }
   }
 
-  const isValid = category.trim() && name.trim() && description.trim()
+  const isValid = (isBug || category.trim()) && name.trim() && description.trim()
 
   return (
     <div className="neo-modal-backdrop" onClick={onClose}>
@@ -73,7 +76,7 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b-3 border-[var(--color-neo-border)]">
           <h2 className="font-display text-2xl font-bold">
-            Add Feature
+            {isBug ? 'Report Bug' : 'Add Feature'}
           </h2>
           <button
             onClick={onClose}
@@ -100,46 +103,78 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
             </div>
           )}
 
-          {/* Category & Priority Row */}
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="block font-display font-bold mb-2 uppercase text-sm">
-                Category
-              </label>
-              <input
-                type="text"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="e.g., Authentication, UI, API"
-                className="neo-input"
-                required
-              />
-            </div>
-            <div className="w-32">
-              <label className="block font-display font-bold mb-2 uppercase text-sm">
-                Priority
-              </label>
-              <input
-                type="number"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                placeholder="Auto"
-                min="1"
-                className="neo-input"
-              />
-            </div>
+          {/* Type Toggle: Feature / Bug */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setItemType('feature')}
+              className={`neo-btn flex-1 flex items-center justify-center gap-2 ${
+                !isBug ? 'neo-btn-primary' : 'neo-btn-ghost'
+              }`}
+            >
+              <Sparkles size={18} />
+              Feature
+            </button>
+            <button
+              type="button"
+              onClick={() => setItemType('bug')}
+              className={`neo-btn flex-1 flex items-center justify-center gap-2 ${
+                isBug ? 'neo-btn-danger' : 'neo-btn-ghost'
+              }`}
+            >
+              <Bug size={18} />
+              Bug Report
+            </button>
           </div>
+
+          {isBug && (
+            <div className="p-3 bg-[var(--color-neo-danger)]/10 border-3 border-[var(--color-neo-danger)] text-sm">
+              <strong>Bug Mode:</strong> AI agent will analyze this bug and automatically create fix features.
+            </div>
+          )}
+
+          {/* Category & Priority Row - hidden for bugs */}
+          {!isBug && (
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block font-display font-bold mb-2 uppercase text-sm">
+                  Category
+                </label>
+                <input
+                  type="text"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  placeholder="e.g., Authentication, UI, API"
+                  className="neo-input"
+                  required={!isBug}
+                />
+              </div>
+              <div className="w-32">
+                <label className="block font-display font-bold mb-2 uppercase text-sm">
+                  Priority
+                </label>
+                <input
+                  type="number"
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  placeholder="Auto"
+                  min="1"
+                  className="neo-input"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Name */}
           <div>
             <label className="block font-display font-bold mb-2 uppercase text-sm">
-              Feature Name
+              {isBug ? 'Bug Title' : 'Feature Name'}
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., User login form"
+              placeholder={isBug ? "e.g., Login button not responding" : "e.g., User login form"}
               className="neo-input"
               required
             />
@@ -148,12 +183,12 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
           {/* Description */}
           <div>
             <label className="block font-display font-bold mb-2 uppercase text-sm">
-              Description
+              {isBug ? 'Bug Description' : 'Description'}
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe what this feature should do..."
+              placeholder={isBug ? "Describe what's broken and expected behavior..." : "Describe what this feature should do..."}
               className="neo-input min-h-[100px] resize-y"
               required
             />
@@ -162,7 +197,7 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
           {/* Steps */}
           <div>
             <label className="block font-display font-bold mb-2 uppercase text-sm">
-              Test Steps (Optional)
+              {isBug ? 'Steps to Reproduce (Optional)' : 'Test Steps (Optional)'}
             </label>
             <div className="space-y-2">
               {steps.map((step, index) => (
@@ -204,14 +239,14 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
             <button
               type="submit"
               disabled={!isValid || createFeature.isPending}
-              className="neo-btn neo-btn-success flex-1"
+              className={`neo-btn flex-1 ${isBug ? 'neo-btn-danger' : 'neo-btn-success'}`}
             >
               {createFeature.isPending ? (
                 <Loader2 size={18} className="animate-spin" />
               ) : (
                 <>
-                  <Plus size={18} />
-                  Create Feature
+                  {isBug ? <Bug size={18} /> : <Plus size={18} />}
+                  {isBug ? 'Report Bug' : 'Create Feature'}
                 </>
               )}
             </button>

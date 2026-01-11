@@ -76,6 +76,14 @@ class FeatureBase(BaseModel):
 class FeatureCreate(FeatureBase):
     """Request schema for creating a new feature."""
     priority: int | None = None
+    item_type: Literal["feature", "bug"] = "feature"
+
+
+class BugCreate(BaseModel):
+    """Request schema for creating a bug report."""
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str = Field(..., min_length=1)
+    steps_to_reproduce: list[str] = Field(default_factory=list)
 
 
 class FeatureResponse(FeatureBase):
@@ -84,6 +92,9 @@ class FeatureResponse(FeatureBase):
     priority: int
     passes: bool
     in_progress: bool
+    item_type: str = "feature"
+    parent_bug_id: int | None = None
+    bug_status: str | None = None
 
     class Config:
         from_attributes = True

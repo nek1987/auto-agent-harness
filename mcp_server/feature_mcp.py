@@ -154,28 +154,102 @@ def feature_get_stats() -> str:
 
 @mcp.tool()
 def feature_get_next() -> str:
-    """Get the highest-priority pending feature to work on.
+    """Get the next item to work on, prioritizing bugs and their fixes.
 
-    Returns the feature with the lowest priority number that has passes=false.
-    Use this at the start of each coding session to determine what to implement next.
+    Priority order:
+    1. Open bugs (item_type='bug', bug_status='open') - need analysis
+    2. Bug fix features (parent_bug_id is set) - derived from bug analysis
+    3. Regular features (item_type='feature')
+
+    When a bug is returned, analyze it and create fix features using feature_create_bulk
+    with parent_bug_id set.
 
     Returns:
-        JSON with feature details (id, priority, category, name, description, steps, passes, in_progress)
-        or error message if all features are passing.
+        JSON with:
+        - type: 'bug_analysis_needed' | 'bug_fix' | 'feature' | 'all_done'
+        - For bugs: instruction to analyze and create fix features
+        - For features: standard feature details
     """
     session = get_session()
     try:
-        feature = (
+        # 1. First check for open bugs that need analysis
+        bug = (
             session.query(Feature)
-            .filter(Feature.passes == False)
+            .filter(
+                Feature.item_type == "bug",
+                Feature.bug_status == "open",
+                Feature.passes == False
+            )
             .order_by(Feature.priority.asc(), Feature.id.asc())
             .first()
         )
 
-        if feature is None:
-            return json.dumps({"error": "All features are passing! No more work to do."})
+        if bug:
+            # Mark bug as being analyzed
+            bug.bug_status = "analyzing"
+            session.commit()
+            session.refresh(bug)
 
-        return json.dumps(feature.to_dict(), indent=2)
+            return json.dumps({
+                "type": "bug_analysis_needed",
+                "bug": bug.to_dict(),
+                "instruction": (
+                    "Analyze this bug and create fix features using feature_create_bulk. "
+                    "Include 'parent_bug_id': " + str(bug.id) + " in each fix feature. "
+                    "After creating fixes, the bug status will be 'fixing'."
+                )
+            }, indent=2)
+
+        # 2. Then check for bug fix features (highest priority after bug analysis)
+        fix_feature = (
+            session.query(Feature)
+            .filter(
+                Feature.passes == False,
+                Feature.in_progress == False,
+                Feature.parent_bug_id != None
+            )
+            .order_by(Feature.priority.asc(), Feature.id.asc())
+            .first()
+        )
+
+        if fix_feature:
+            return json.dumps({
+                "type": "bug_fix",
+                "feature": fix_feature.to_dict(),
+                "parent_bug_id": fix_feature.parent_bug_id,
+                "instruction": "This is a fix for bug #" + str(fix_feature.parent_bug_id) + ". Implement and test carefully."
+            }, indent=2)
+
+        # 3. Finally check for regular features
+        feature = (
+            session.query(Feature)
+            .filter(
+                Feature.passes == False,
+                Feature.in_progress == False,
+                Feature.item_type == "feature"
+            )
+            .order_by(Feature.priority.asc(), Feature.id.asc())
+            .first()
+        )
+
+        if feature:
+            return json.dumps({
+                "type": "feature",
+                "feature": feature.to_dict()
+            }, indent=2)
+
+        # 4. Check if there are any non-passing features at all
+        any_pending = session.query(Feature).filter(Feature.passes == False).first()
+        if any_pending:
+            return json.dumps({
+                "type": "in_progress",
+                "message": "All pending features are currently in-progress. Wait or use feature_clear_in_progress."
+            })
+
+        return json.dumps({
+            "type": "all_done",
+            "message": "All features are passing! No more work to do."
+        })
     finally:
         session.close()
 
@@ -376,18 +450,20 @@ def feature_create_bulk(
     Features are assigned sequential priorities based on their order.
     All features start with passes=false.
 
-    This is typically used by the initializer agent to set up the initial
-    feature list from the app specification.
+    This is typically used by:
+    - Initializer agent to set up features from app specification
+    - Bug analyzer to create fix features (include parent_bug_id)
 
     Args:
         features: List of features to create, each with:
-            - category (str): Feature category
+            - category (str): Feature category (use 'bugfix' for bug fixes)
             - name (str): Feature name
             - description (str): Detailed description
             - steps (list[str]): Implementation/test steps
+            - parent_bug_id (int, optional): Bug ID if this is a fix feature
 
     Returns:
-        JSON with: created (int) - number of features created
+        JSON with: created (int), bug_fixes (int) - number of features created
     """
     session = get_session()
     try:
@@ -396,12 +472,20 @@ def feature_create_bulk(
         start_priority = (max_priority_result[0] + 1) if max_priority_result else 1
 
         created_count = 0
+        bug_fix_count = 0
+        parent_bug_ids = set()
+
         for i, feature_data in enumerate(features):
             # Validate required fields
             if not all(key in feature_data for key in ["category", "name", "description", "steps"]):
                 return json.dumps({
                     "error": f"Feature at index {i} missing required fields (category, name, description, steps)"
                 })
+
+            parent_bug_id = feature_data.get("parent_bug_id")
+            if parent_bug_id:
+                parent_bug_ids.add(parent_bug_id)
+                bug_fix_count += 1
 
             db_feature = Feature(
                 priority=start_priority + i,
@@ -410,13 +494,27 @@ def feature_create_bulk(
                 description=feature_data["description"],
                 steps=feature_data["steps"],
                 passes=False,
+                item_type="feature",
+                parent_bug_id=parent_bug_id,
             )
             session.add(db_feature)
             created_count += 1
 
+        # Update bug status to 'fixing' if we created fix features
+        for bug_id in parent_bug_ids:
+            bug = session.query(Feature).filter(Feature.id == bug_id).first()
+            if bug and bug.item_type == "bug":
+                bug.bug_status = "fixing"
+
         session.commit()
 
-        return json.dumps({"created": created_count}, indent=2)
+        result = {"created": created_count}
+        if bug_fix_count > 0:
+            result["bug_fixes"] = bug_fix_count
+            result["parent_bugs"] = list(parent_bug_ids)
+            result["message"] = f"Created {bug_fix_count} fix features for bug(s) {list(parent_bug_ids)}"
+
+        return json.dumps(result, indent=2)
     except Exception as e:
         session.rollback()
         return json.dumps({"error": str(e)})
@@ -555,6 +653,117 @@ def feature_bulk_mark_passing(
     except Exception as e:
         session.rollback()
         return json.dumps({"error": str(e)})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def bug_mark_resolved(
+    bug_id: Annotated[int, Field(description="The ID of the bug to mark as resolved", ge=1)]
+) -> str:
+    """Mark a bug as resolved after all its fix features pass.
+
+    This tool checks if all features with parent_bug_id matching the bug_id
+    have passes=true. If so, it marks the bug as resolved.
+
+    Call this after completing the last fix feature for a bug.
+
+    Args:
+        bug_id: The ID of the bug to mark as resolved
+
+    Returns:
+        JSON with success status or error if fixes are incomplete
+    """
+    session = get_session()
+    try:
+        bug = session.query(Feature).filter(Feature.id == bug_id).first()
+
+        if bug is None:
+            return json.dumps({"error": f"Bug with ID {bug_id} not found"})
+
+        if bug.item_type != "bug":
+            return json.dumps({"error": f"Item {bug_id} is not a bug (type: {bug.item_type})"})
+
+        # Check all fix features for this bug
+        fixes = session.query(Feature).filter(Feature.parent_bug_id == bug_id).all()
+
+        if not fixes:
+            return json.dumps({
+                "error": f"No fix features found for bug {bug_id}. Create fixes using feature_create_bulk with parent_bug_id."
+            })
+
+        pending_fixes = [f.id for f in fixes if not f.passes]
+
+        if pending_fixes:
+            return json.dumps({
+                "error": f"Bug cannot be resolved. Pending fix features: {pending_fixes}",
+                "pending_count": len(pending_fixes),
+                "total_fixes": len(fixes)
+            })
+
+        # All fixes pass - resolve the bug
+        bug.bug_status = "resolved"
+        bug.passes = True
+        bug.in_progress = False
+        session.commit()
+        session.refresh(bug)
+
+        return json.dumps({
+            "success": True,
+            "bug_id": bug_id,
+            "bug_name": bug.name,
+            "fixes_completed": len(fixes),
+            "message": f"Bug '{bug.name}' resolved with {len(fixes)} fix(es)"
+        }, indent=2)
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def bug_get_status(
+    bug_id: Annotated[int, Field(description="The ID of the bug to check", ge=1)]
+) -> str:
+    """Get the current status of a bug and its fix features.
+
+    Args:
+        bug_id: The ID of the bug to check
+
+    Returns:
+        JSON with bug details and fix feature statuses
+    """
+    session = get_session()
+    try:
+        bug = session.query(Feature).filter(Feature.id == bug_id).first()
+
+        if bug is None:
+            return json.dumps({"error": f"Bug with ID {bug_id} not found"})
+
+        if bug.item_type != "bug":
+            return json.dumps({"error": f"Item {bug_id} is not a bug (type: {bug.item_type})"})
+
+        # Get all fix features
+        fixes = session.query(Feature).filter(Feature.parent_bug_id == bug_id).all()
+
+        fix_details = []
+        passing_count = 0
+        for f in fixes:
+            fix_details.append({
+                "id": f.id,
+                "name": f.name,
+                "passes": f.passes,
+                "in_progress": f.in_progress
+            })
+            if f.passes:
+                passing_count += 1
+
+        return json.dumps({
+            "bug": bug.to_dict(),
+            "status": bug.bug_status,
+            "fixes": fix_details,
+            "fixes_total": len(fixes),
+            "fixes_passing": passing_count,
+            "can_resolve": len(fixes) > 0 and passing_count == len(fixes)
+        }, indent=2)
     finally:
         session.close()
 

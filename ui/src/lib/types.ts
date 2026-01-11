@@ -57,6 +57,9 @@ export interface ProjectPrompts {
 }
 
 // Feature types
+export type ItemType = 'feature' | 'bug'
+export type BugStatus = 'open' | 'analyzing' | 'fixing' | 'resolved'
+
 export interface Feature {
   id: number
   priority: number
@@ -66,6 +69,9 @@ export interface Feature {
   steps: string[]
   passes: boolean
   in_progress: boolean
+  item_type: ItemType
+  parent_bug_id: number | null
+  bug_status: BugStatus | null
 }
 
 export interface FeatureListResponse {
@@ -80,6 +86,7 @@ export interface FeatureCreate {
   description: string
   steps: string[]
   priority?: number
+  item_type?: ItemType
 }
 
 // Agent types
