@@ -39,6 +39,11 @@ class Feature(Base):
     parent_bug_id = Column(Integer, nullable=True, index=True)  # For fix features, reference to parent bug
     bug_status = Column(String(20), nullable=True, index=True)  # "open", "analyzing", "fixing", "resolved"
 
+    # Architectural layer for proper implementation ordering
+    # 0=skeleton, 1=database, 2=backend_core, 3=auth, 4=backend_features,
+    # 5=frontend_core, 6=frontend_features, 7=integration, 8=quality
+    arch_layer = Column(Integer, nullable=False, default=8, index=True)
+
     def to_dict(self) -> dict:
         """Convert feature to dictionary for JSON serialization."""
         return {
@@ -55,6 +60,7 @@ class Feature(Base):
             "item_type": self.item_type,
             "parent_bug_id": self.parent_bug_id,
             "bug_status": self.bug_status,
+            "arch_layer": self.arch_layer,
         }
 
 
@@ -109,6 +115,14 @@ def _migrate_database(engine) -> None:
         # Migration 6: Add bug_status column for Bug System
         if "bug_status" not in columns:
             conn.execute(text("ALTER TABLE features ADD COLUMN bug_status VARCHAR(20)"))
+            conn.commit()
+
+        # Migration 7: Add arch_layer column for architectural ordering
+        if "arch_layer" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN arch_layer INTEGER DEFAULT 8"))
+            conn.commit()
+            # Create index for better query performance
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_arch_layer ON features(arch_layer)"))
             conn.commit()
 
 

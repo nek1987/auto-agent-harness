@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api.database import Feature, create_database
 from api.migration import migrate_json_to_sqlite
+from lib.architecture_layers import get_layer_for_category, ArchLayer, get_layer_name
 
 # Configuration from environment
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", ".")).resolve()
@@ -159,7 +160,12 @@ def feature_get_next() -> str:
     Priority order:
     1. Open bugs (item_type='bug', bug_status='open') - need analysis
     2. Bug fix features (parent_bug_id is set) - derived from bug analysis
-    3. Regular features (item_type='feature')
+    3. Regular features - ordered by arch_layer FIRST, then priority
+       (ensures foundation layers are built before features)
+
+    Architectural layer order (0-8):
+    0=Skeleton, 1=Database, 2=Backend Core, 3=Auth, 4=Backend Features,
+    5=Frontend Core, 6=Frontend Features, 7=Integration, 8=Quality
 
     When a bug is returned, analyze it and create fix features using feature_create_bulk
     with parent_bug_id set.
@@ -168,7 +174,7 @@ def feature_get_next() -> str:
         JSON with:
         - type: 'bug_analysis_needed' | 'bug_fix' | 'feature' | 'all_done'
         - For bugs: instruction to analyze and create fix features
-        - For features: standard feature details
+        - For features: standard feature details with arch_layer info
     """
     session = get_session()
     try:
@@ -221,6 +227,7 @@ def feature_get_next() -> str:
             }, indent=2)
 
         # 3. Finally check for regular features
+        # ORDER BY arch_layer ASC ensures foundation layers (0-3) come before feature layers (4-8)
         feature = (
             session.query(Feature)
             .filter(
@@ -228,14 +235,27 @@ def feature_get_next() -> str:
                 Feature.in_progress == False,
                 Feature.item_type == "feature"
             )
-            .order_by(Feature.priority.asc(), Feature.id.asc())
+            .order_by(
+                Feature.arch_layer.asc(),  # Foundation first, then features, then quality
+                Feature.priority.asc(),     # Within same layer, use priority
+                Feature.id.asc()            # Tie-breaker
+            )
             .first()
         )
 
         if feature:
+            # Add layer info to help agent understand context
+            layer_num = feature.arch_layer if feature.arch_layer is not None else 8
+            layer_name = get_layer_name(ArchLayer(layer_num))
+
             return json.dumps({
                 "type": "feature",
-                "feature": feature.to_dict()
+                "feature": feature.to_dict(),
+                "layer_info": {
+                    "layer": layer_num,
+                    "layer_name": layer_name,
+                    "hint": f"This is a {layer_name} feature (layer {layer_num}/8)"
+                }
             }, indent=2)
 
         # 4. Check if there are any non-passing features at all
@@ -449,21 +469,34 @@ def feature_create_bulk(
 
     Features are assigned sequential priorities based on their order.
     All features start with passes=false.
+    Architectural layer (arch_layer) is auto-assigned based on category.
 
     This is typically used by:
     - Initializer agent to set up features from app specification
     - Bug analyzer to create fix features (include parent_bug_id)
 
+    Architectural layers (auto-assigned by category):
+    - 0: skeleton, setup, config, infrastructure
+    - 1: database, schema, models, migrations
+    - 2: backend_core, api_structure, middleware
+    - 3: auth, security, authentication, authorization
+    - 4: api_endpoints, backend_features, services
+    - 5: frontend_core, navigation, layout
+    - 6: ui_components, frontend_features, forms, pages
+    - 7: workflow, integration, full_stack
+    - 8: quality, error_handling, validation, accessibility, performance (default)
+
     Args:
         features: List of features to create, each with:
-            - category (str): Feature category (use 'bugfix' for bug fixes)
+            - category (str): Feature category (determines arch_layer)
             - name (str): Feature name
             - description (str): Detailed description
             - steps (list[str]): Implementation/test steps
             - parent_bug_id (int, optional): Bug ID if this is a fix feature
+            - arch_layer (int, optional): Override auto-assigned layer (0-8)
 
     Returns:
-        JSON with: created (int), bug_fixes (int) - number of features created
+        JSON with: created (int), bug_fixes (int), layers_summary - number of features created
     """
     session = get_session()
     try:
@@ -474,6 +507,7 @@ def feature_create_bulk(
         created_count = 0
         bug_fix_count = 0
         parent_bug_ids = set()
+        layers_summary = {}  # Track features per layer
 
         for i, feature_data in enumerate(features):
             # Validate required fields
@@ -487,15 +521,31 @@ def feature_create_bulk(
                 parent_bug_ids.add(parent_bug_id)
                 bug_fix_count += 1
 
+            # Auto-assign architectural layer based on category
+            category = feature_data["category"]
+            explicit_layer = feature_data.get("arch_layer")
+
+            if explicit_layer is not None and 0 <= explicit_layer <= 8:
+                arch_layer = explicit_layer
+            else:
+                arch_layer = int(get_layer_for_category(category))
+
+            # Track layers for summary
+            layer_name = get_layer_name(ArchLayer(arch_layer))
+            if layer_name not in layers_summary:
+                layers_summary[layer_name] = 0
+            layers_summary[layer_name] += 1
+
             db_feature = Feature(
                 priority=start_priority + i,
-                category=feature_data["category"],
+                category=category,
                 name=feature_data["name"],
                 description=feature_data["description"],
                 steps=feature_data["steps"],
                 passes=False,
                 item_type="feature",
                 parent_bug_id=parent_bug_id,
+                arch_layer=arch_layer,
             )
             session.add(db_feature)
             created_count += 1
@@ -508,7 +558,10 @@ def feature_create_bulk(
 
         session.commit()
 
-        result = {"created": created_count}
+        result = {
+            "created": created_count,
+            "layers_summary": layers_summary,
+        }
         if bug_fix_count > 0:
             result["bug_fixes"] = bug_fix_count
             result["parent_bugs"] = list(parent_bug_ids)

@@ -207,6 +207,29 @@ class ImageAttachment(BaseModel):
             raise ValueError(f'Invalid base64 data: {e}')
 
 
+# Maximum text file size: 1 MB
+MAX_TEXT_SIZE = 1 * 1024 * 1024
+
+
+class TextAttachment(BaseModel):
+    """Text file attachment for spec analysis (.txt, .md)."""
+    filename: str = Field(..., min_length=1, max_length=255)
+    mimeType: Literal['text/plain', 'text/markdown']
+    content: str
+
+    @field_validator('content')
+    @classmethod
+    def validate_content_size(cls, v: str) -> str:
+        """Validate that text content is within size limit."""
+        size = len(v.encode('utf-8'))
+        if size > MAX_TEXT_SIZE:
+            raise ValueError(
+                f'Text file size ({size / (1024 * 1024):.2f} MB) exceeds '
+                f'maximum of {MAX_TEXT_SIZE // (1024 * 1024)} MB'
+            )
+        return v
+
+
 # ============================================================================
 # Filesystem Schemas
 # ============================================================================

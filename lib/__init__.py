@@ -2,6 +2,8 @@
 Library modules for Auto-Agent-Harness.
 
 Contains:
+- architecture_layers: Architectural layer definitions for implementation ordering
+- layer_validator: Validation of feature layer dependencies
 - dependency_resolver: Topological sorting for feature dependencies
 - context_loader: Loading context files for agent prompts
 - state_machine: Agent lifecycle state management
@@ -15,6 +17,27 @@ Contains:
 - docker_validator: Validation of Docker configuration
 """
 
+from .architecture_layers import (
+    ArchLayer,
+    CATEGORY_TO_LAYER,
+    LAYER_NAMES,
+    get_layer_for_category,
+    get_layer_name,
+    get_required_layers,
+    is_layer_blocked,
+    suggest_next_layer,
+)
+from .layer_validator import (
+    LayerStats,
+    LayerValidationResult,
+    validate_feature_order,
+    get_layer_stats,
+    get_blocking_layers,
+    validate_layer_dependencies,
+    suggest_skip_reason,
+    get_layer_progress_summary,
+    auto_assign_layer,
+)
 from .dependency_resolver import DependencyResolver, DependencyCycleError
 from .context_loader import load_context_files, get_context_files, ContextFile
 from .skills_loader import SkillsLoader, SkillInfo, get_skills_context, SKILL_CATEGORIES
@@ -68,6 +91,25 @@ from .docker_validator import (
 )
 
 __all__ = [
+    # Architecture layers
+    "ArchLayer",
+    "CATEGORY_TO_LAYER",
+    "LAYER_NAMES",
+    "get_layer_for_category",
+    "get_layer_name",
+    "get_required_layers",
+    "is_layer_blocked",
+    "suggest_next_layer",
+    # Layer validator
+    "LayerStats",
+    "LayerValidationResult",
+    "validate_feature_order",
+    "get_layer_stats",
+    "get_blocking_layers",
+    "validate_layer_dependencies",
+    "suggest_skip_reason",
+    "get_layer_progress_summary",
+    "auto_assign_layer",
     # Dependency resolver
     "DependencyResolver",
     "DependencyCycleError",

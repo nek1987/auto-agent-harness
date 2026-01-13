@@ -54,6 +54,12 @@ SKILL_CATEGORIES: dict[str, list[str]] = {
         "senior-fullstack",
         "cto-advisor",
     ],
+    # Architecture planning mode - designing implementation order
+    "architecture_planning": [
+        "senior-architect",
+        "product-manager-toolkit",
+        "senior-fullstack",
+    ],
     # Frontend mode - UI development
     "frontend": [
         "senior-frontend",
@@ -96,11 +102,20 @@ SKILL_CATEGORIES: dict[str, list[str]] = {
         "senior-prompt-engineer",
         "senior-ml-engineer",
     ],
-    # Initializer mode - project setup
+    # Initializer mode - project setup with architectural planning
+    # Uses architect for structure and product-manager for prioritization
     "initializer": [
         "senior-architect",
-        "senior-fullstack",
         "product-manager-toolkit",
+    ],
+    # Spec analysis mode - for analyzing uploaded app-specs
+    # Uses architect for structure, product-manager for requirements quality,
+    # and CTO for tech stack evaluation
+    "spec_analysis": [
+        "senior-architect",
+        "product-manager-toolkit",
+        "cto-advisor",
+        "code-reviewer",
     ],
 }
 

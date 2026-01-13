@@ -14,7 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ValidationError
 
-from ..schemas import ImageAttachment
+from ..schemas import ImageAttachment, TextAttachment
 from ..services.spec_chat_session import (
     SpecChatSession,
     create_session,
@@ -171,7 +171,9 @@ async def spec_chat_websocket(websocket: WebSocket, project_name: str):
 
     Client -> Server:
     - {"type": "start"} - Start the spec creation session
-    - {"type": "message", "content": "..."} - Send user message
+    - {"type": "message", "content": "...", "attachments": [...], "text_attachments": [...]}
+      - attachments: Optional image files [{filename, mimeType, base64Data}]
+      - text_attachments: Optional text files for spec analysis [{filename, mimeType, content}]
     - {"type": "answer", "answers": {...}, "tool_id": "..."} - Answer structured question
     - {"type": "ping"} - Keep-alive ping
 
@@ -253,7 +255,7 @@ async def spec_chat_websocket(websocket: WebSocket, project_name: str):
 
                     user_content = message.get("content", "").strip()
 
-                    # Parse attachments if present
+                    # Parse image attachments if present
                     attachments: list[ImageAttachment] = []
                     raw_attachments = message.get("attachments", [])
                     if raw_attachments:
@@ -261,15 +263,30 @@ async def spec_chat_websocket(websocket: WebSocket, project_name: str):
                             for raw_att in raw_attachments:
                                 attachments.append(ImageAttachment(**raw_att))
                         except (ValidationError, Exception) as e:
-                            logger.warning(f"Invalid attachment data: {e}")
+                            logger.warning(f"Invalid image attachment data: {e}")
                             await websocket.send_json({
                                 "type": "error",
-                                "content": f"Invalid attachment: {str(e)}"
+                                "content": f"Invalid image attachment: {str(e)}"
+                            })
+                            continue
+
+                    # Parse text attachments if present (for spec analysis)
+                    text_attachments: list[TextAttachment] = []
+                    raw_text_attachments = message.get("text_attachments", [])
+                    if raw_text_attachments:
+                        try:
+                            for raw_att in raw_text_attachments:
+                                text_attachments.append(TextAttachment(**raw_att))
+                        except (ValidationError, Exception) as e:
+                            logger.warning(f"Invalid text attachment data: {e}")
+                            await websocket.send_json({
+                                "type": "error",
+                                "content": f"Invalid text attachment: {str(e)}"
                             })
                             continue
 
                     # Allow empty content if attachments are present
-                    if not user_content and not attachments:
+                    if not user_content and not attachments and not text_attachments:
                         await websocket.send_json({
                             "type": "error",
                             "content": "Empty message"
@@ -281,7 +298,11 @@ async def spec_chat_websocket(websocket: WebSocket, project_name: str):
                     spec_path = None
 
                     # Stream Claude's response (with attachments if present)
-                    async for chunk in session.send_message(user_content, attachments if attachments else None):
+                    async for chunk in session.send_message(
+                        user_content,
+                        attachments if attachments else None,
+                        text_attachments if text_attachments else None
+                    ):
                         # Track spec_complete but don't send complete yet
                         if chunk.get("type") == "spec_complete":
                             spec_complete_received = True

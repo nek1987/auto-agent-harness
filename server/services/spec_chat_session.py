@@ -16,7 +16,12 @@ from typing import AsyncGenerator, Optional
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 
-from ..schemas import ImageAttachment
+from ..schemas import ImageAttachment, TextAttachment
+
+# Import skills loader for spec analysis mode
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from lib.skills_loader import get_skills_context
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +76,8 @@ class SpecChatSession:
         self.created_at = datetime.now()
         self._conversation_id: Optional[str] = None
         self._client_entered: bool = False  # Track if context manager is active
+        self._in_analysis_mode: bool = False  # Track if analyzing uploaded spec
+        self._uploaded_spec_content: Optional[str] = None  # Store uploaded spec for reference
 
     async def close(self) -> None:
         """Clean up resources and close the Claude client."""
@@ -188,7 +195,8 @@ class SpecChatSession:
     async def send_message(
         self,
         user_message: str,
-        attachments: list[ImageAttachment] | None = None
+        attachments: list[ImageAttachment] | None = None,
+        text_attachments: list[TextAttachment] | None = None
     ) -> AsyncGenerator[dict, None]:
         """
         Send user message and stream Claude's response.
@@ -196,6 +204,7 @@ class SpecChatSession:
         Args:
             user_message: The user's response
             attachments: Optional list of image attachments
+            text_attachments: Optional list of text file attachments (for spec analysis)
 
         Yields:
             Message chunks of various types:
@@ -211,17 +220,42 @@ class SpecChatSession:
             }
             return
 
+        # Check for uploaded spec file in text attachments
+        spec_content = None
+        spec_filename = None
+        if text_attachments:
+            for att in text_attachments:
+                # Look for spec-like files
+                fname_lower = att.filename.lower()
+                if 'spec' in fname_lower or fname_lower.endswith('.txt') or fname_lower.endswith('.md'):
+                    spec_content = att.content
+                    spec_filename = att.filename
+                    break
+
         # Store the user message
         self.messages.append({
             "role": "user",
             "content": user_message,
             "has_attachments": bool(attachments),
+            "has_text_attachments": bool(text_attachments),
             "timestamp": datetime.now().isoformat()
         })
 
         try:
-            async for chunk in self._query_claude(user_message, attachments):
-                yield chunk
+            # If spec file uploaded and not in analysis mode yet, switch to analysis
+            if spec_content and not self._in_analysis_mode:
+                self._in_analysis_mode = True
+                self._uploaded_spec_content = spec_content
+                logger.info(f"Switching to spec analysis mode for file: {spec_filename}")
+
+                # Build analysis prompt with skills context
+                async for chunk in self._analyze_spec(spec_content, spec_filename, user_message):
+                    yield chunk
+            else:
+                # Standard message flow
+                async for chunk in self._query_claude(user_message, attachments):
+                    yield chunk
+
             # Signal that the response is complete (for UI to hide loading indicator)
             yield {"type": "response_done"}
         except Exception as e:
@@ -230,6 +264,60 @@ class SpecChatSession:
                 "type": "error",
                 "content": f"Error: {str(e)}"
             }
+
+    async def _analyze_spec(
+        self,
+        spec_content: str,
+        filename: str,
+        user_context: str | None = None
+    ) -> AsyncGenerator[dict, None]:
+        """
+        Analyze an uploaded app-spec file using skills.
+
+        Args:
+            spec_content: The content of the uploaded spec file
+            filename: Name of the uploaded file
+            user_context: Optional user message accompanying the upload
+        """
+        if not self.client:
+            return
+
+        # Load skills context for spec analysis
+        skills_context = get_skills_context(ROOT_DIR, "spec_analysis")
+
+        # Load the analysis prompt template
+        template_path = ROOT_DIR / ".claude" / "templates" / "spec_analysis_prompt.template.md"
+        if template_path.exists():
+            try:
+                template = template_path.read_text(encoding="utf-8")
+                analysis_instructions = template.replace("{{SKILLS_CONTEXT}}", skills_context)
+            except Exception as e:
+                logger.warning(f"Failed to load spec analysis template: {e}")
+                analysis_instructions = skills_context
+        else:
+            analysis_instructions = skills_context
+
+        # Build the analysis prompt
+        analysis_prompt = f"""{analysis_instructions}
+
+---
+
+## Uploaded App-Spec File: {filename}
+
+```
+{spec_content}
+```
+
+{f"## User Context: {user_context}" if user_context else ""}
+
+---
+
+Please analyze this specification and provide your assessment.
+"""
+
+        # Send to Claude for analysis
+        async for chunk in self._query_claude(analysis_prompt, None):
+            yield chunk
 
     async def _query_claude(
         self,

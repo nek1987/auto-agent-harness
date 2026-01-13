@@ -6,16 +6,31 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Send, X, CheckCircle2, AlertCircle, Wifi, WifiOff, RotateCcw, Loader2, ArrowRight, Zap, Paperclip, ExternalLink } from 'lucide-react'
+import { Send, X, CheckCircle2, AlertCircle, Wifi, WifiOff, RotateCcw, Loader2, ArrowRight, Zap, Paperclip, ExternalLink, FileText } from 'lucide-react'
 import { useSpecChat } from '../hooks/useSpecChat'
 import { ChatMessage } from './ChatMessage'
 import { QuestionOptions } from './QuestionOptions'
 import { TypingIndicator } from './TypingIndicator'
-import type { ImageAttachment } from '../lib/types'
+import type { ImageAttachment, TextAttachment, Attachment } from '../lib/types'
+import { isImageAttachment, isTextAttachment } from '../lib/types'
 
-// Image upload validation constants
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
-const ALLOWED_TYPES = ['image/jpeg', 'image/png']
+// File upload validation constants
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5 MB for images
+const MAX_TEXT_SIZE = 1 * 1024 * 1024  // 1 MB for text files
+const IMAGE_TYPES = ['image/jpeg', 'image/png']
+const TEXT_TYPES = ['text/plain', 'text/markdown', 'application/octet-stream'] // octet-stream for .md on some systems
+const TEXT_EXTENSIONS = ['.txt', '.md']
+
+// Helper to check if file is a text file
+const isTextFile = (file: File): boolean => {
+  const ext = file.name.toLowerCase().match(/\.[^.]+$/)?.[0] || ''
+  return TEXT_EXTENSIONS.includes(ext) || TEXT_TYPES.includes(file.type)
+}
+
+// Helper to get text mime type from extension
+const getTextMimeType = (filename: string): 'text/plain' | 'text/markdown' => {
+  return filename.toLowerCase().endsWith('.md') ? 'text/markdown' : 'text/plain'
+}
 
 type InitializerStatus = 'idle' | 'starting' | 'error'
 
@@ -41,7 +56,7 @@ export function SpecCreationChat({
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [yoloEnabled, setYoloEnabled] = useState(false)
-  const [pendingAttachments, setPendingAttachments] = useState<ImageAttachment[]>([])
+  const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -95,7 +110,15 @@ export function SpecCreationChat({
       return
     }
 
-    sendMessage(trimmed, pendingAttachments.length > 0 ? pendingAttachments : undefined)
+    // Separate image and text attachments
+    const imageAttachments = pendingAttachments.filter(isImageAttachment)
+    const textAttachments = pendingAttachments.filter(isTextAttachment)
+
+    sendMessage(
+      trimmed,
+      imageAttachments.length > 0 ? imageAttachments : undefined,
+      textAttachments.length > 0 ? textAttachments : undefined
+    )
     setInput('')
     setPendingAttachments([]) // Clear attachments after sending
   }
@@ -111,42 +134,68 @@ export function SpecCreationChat({
     sendAnswer(answers)
   }
 
-  // File handling for image attachments
+  // File handling for image and text attachments
   const handleFileSelect = useCallback((files: FileList | null) => {
     if (!files) return
 
     Array.from(files).forEach((file) => {
+      const isText = isTextFile(file)
+      const isImage = IMAGE_TYPES.includes(file.type)
+
       // Validate file type
-      if (!ALLOWED_TYPES.includes(file.type)) {
-        setError(`Invalid file type: ${file.name}. Only JPEG and PNG are supported.`)
+      if (!isText && !isImage) {
+        setError(`Invalid file type: ${file.name}. Supported: JPEG, PNG, .txt, .md`)
         return
       }
 
-      // Validate file size
-      if (file.size > MAX_FILE_SIZE) {
-        setError(`File too large: ${file.name}. Maximum size is 5 MB.`)
+      // Validate file size based on type
+      if (isImage && file.size > MAX_IMAGE_SIZE) {
+        setError(`Image too large: ${file.name}. Maximum size is 5 MB.`)
+        return
+      }
+      if (isText && file.size > MAX_TEXT_SIZE) {
+        setError(`Text file too large: ${file.name}. Maximum size is 1 MB.`)
         return
       }
 
-      // Read and convert to base64
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const dataUrl = e.target?.result as string
-        // dataUrl is "data:image/png;base64,XXXXXX"
-        const base64Data = dataUrl.split(',')[1]
+      if (isText) {
+        // Read text file as string
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          const content = e.target?.result as string
 
-        const attachment: ImageAttachment = {
-          id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-          filename: file.name,
-          mimeType: file.type as 'image/jpeg' | 'image/png',
-          base64Data,
-          previewUrl: dataUrl,
-          size: file.size,
+          const attachment: TextAttachment = {
+            id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            filename: file.name,
+            mimeType: getTextMimeType(file.name),
+            content,
+            size: file.size,
+          }
+
+          setPendingAttachments((prev) => [...prev, attachment])
         }
+        reader.readAsText(file)
+      } else {
+        // Read image and convert to base64
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          const dataUrl = e.target?.result as string
+          // dataUrl is "data:image/png;base64,XXXXXX"
+          const base64Data = dataUrl.split(',')[1]
 
-        setPendingAttachments((prev) => [...prev, attachment])
+          const attachment: ImageAttachment = {
+            id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            filename: file.name,
+            mimeType: file.type as 'image/jpeg' | 'image/png',
+            base64Data,
+            previewUrl: dataUrl,
+            size: file.size,
+          }
+
+          setPendingAttachments((prev) => [...prev, attachment])
+        }
+        reader.readAsDataURL(file)
       }
-      reader.readAsDataURL(file)
     })
   }, [])
 
@@ -312,11 +361,22 @@ export function SpecCreationChat({
                   key={attachment.id}
                   className="relative group border-2 border-[var(--color-neo-border)] p-1 bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]"
                 >
-                  <img
-                    src={attachment.previewUrl}
-                    alt={attachment.filename}
-                    className="w-16 h-16 object-cover"
-                  />
+                  {isImageAttachment(attachment) ? (
+                    // Image preview
+                    <img
+                      src={attachment.previewUrl}
+                      alt={attachment.filename}
+                      className="w-16 h-16 object-cover"
+                    />
+                  ) : (
+                    // Text file preview
+                    <div className="w-16 h-16 flex flex-col items-center justify-center bg-gray-50">
+                      <FileText size={24} className="text-blue-500" />
+                      <span className="text-[10px] text-gray-500 mt-1">
+                        {(attachment.size / 1024).toFixed(0)}KB
+                      </span>
+                    </div>
+                  )}
                   <button
                     onClick={() => handleRemoveAttachment(attachment.id)}
                     className="absolute -top-2 -right-2 bg-[var(--color-neo-danger)] text-white rounded-full p-0.5 border-2 border-[var(--color-neo-border)] hover:scale-110 transition-transform"
@@ -339,7 +399,7 @@ export function SpecCreationChat({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png"
+              accept="image/jpeg,image/png,.txt,.md,text/plain,text/markdown"
               multiple
               onChange={(e) => handleFileSelect(e.target.files)}
               className="hidden"
@@ -350,7 +410,7 @@ export function SpecCreationChat({
               onClick={() => fileInputRef.current?.click()}
               disabled={connectionStatus !== 'connected'}
               className="neo-btn neo-btn-ghost p-3"
-              title="Attach image (JPEG, PNG - max 5MB)"
+              title="Attach files (images: JPEG/PNG max 5MB, specs: .txt/.md max 1MB)"
             >
               <Paperclip size={18} />
             </button>
@@ -386,7 +446,7 @@ export function SpecCreationChat({
 
           {/* Help text */}
           <p className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
-            Press Enter to send. Drag & drop or click <Paperclip size={12} className="inline" /> to attach images (JPEG/PNG, max 5MB).
+            Press Enter to send. Drag & drop or click <Paperclip size={12} className="inline" /> to attach files (images, .txt, .md).
           </p>
         </div>
       )}

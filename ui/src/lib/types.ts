@@ -239,12 +239,34 @@ export interface ImageAttachment {
   size: number          // File size in bytes
 }
 
+// Text file attachment for spec analysis
+export interface TextAttachment {
+  id: string
+  filename: string
+  mimeType: 'text/plain' | 'text/markdown'
+  content: string       // Raw text content (not base64)
+  size: number          // File size in bytes
+}
+
+// Union type for all attachments
+export type Attachment = ImageAttachment | TextAttachment
+
+// Type guards for attachments
+export function isImageAttachment(att: Attachment): att is ImageAttachment {
+  return att.mimeType === 'image/jpeg' || att.mimeType === 'image/png'
+}
+
+export function isTextAttachment(att: Attachment): att is TextAttachment {
+  return att.mimeType === 'text/plain' || att.mimeType === 'text/markdown'
+}
+
 // UI chat message for display
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
   attachments?: ImageAttachment[]
+  textAttachments?: TextAttachment[]
   timestamp: Date
   questions?: SpecQuestion[]
   isStreaming?: boolean

@@ -77,363 +77,309 @@ Use the feature_create_bulk tool with features=[
 
 ---
 
-## MANDATORY TEST CATEGORIES
+## MANDATORY TEST CATEGORIES (ARCHITECTURAL ORDER)
 
-The feature_list.json **MUST** include tests from ALL of these categories. The minimum counts scale by complexity tier.
+**CRITICAL: Features MUST be created in this exact architectural order - from foundation to features to quality.**
+
+The system uses architectural layers (0-8) to ensure proper implementation sequence:
+- Foundation layers (0-3) MUST be implemented before feature layers (4-6)
+- Feature layers (4-6) MUST be implemented before quality layers (7-8)
+- Within each layer, use priority to order features
 
 ### Category Distribution by Complexity Tier
 
-| Category                         | Simple  | Medium  | Complex  |
-| -------------------------------- | ------- | ------- | -------- |
-| A. Security & Access Control     | 5       | 20      | 40       |
-| B. Navigation Integrity          | 15      | 25      | 40       |
-| C. Real Data Verification        | 20      | 30      | 50       |
-| D. Workflow Completeness         | 10      | 20      | 40       |
-| E. Error Handling                | 10      | 15      | 25       |
-| F. UI-Backend Integration        | 10      | 20      | 35       |
-| G. State & Persistence           | 8       | 10      | 15       |
-| H. URL & Direct Access           | 5       | 10      | 20       |
-| I. Double-Action & Idempotency   | 5       | 8       | 15       |
-| J. Data Cleanup & Cascade        | 5       | 10      | 20       |
-| K. Default & Reset               | 5       | 8       | 12       |
-| L. Search & Filter Edge Cases    | 8       | 12      | 20       |
-| M. Form Validation               | 10      | 15      | 25       |
-| N. Feedback & Notification       | 8       | 10      | 15       |
-| O. Responsive & Layout           | 8       | 10      | 15       |
-| P. Accessibility                 | 8       | 10      | 15       |
-| Q. Temporal & Timezone           | 5       | 8       | 12       |
-| R. Concurrency & Race Conditions | 5       | 8       | 15       |
-| S. Export/Import                 | 5       | 6       | 10       |
-| T. Performance                   | 5       | 5       | 10       |
-| **TOTAL**                        | **150** | **250** | **400+** |
+| # | Category                         | Layer | Simple | Medium | Complex |
+|---|----------------------------------|-------|--------|--------|---------|
+|   | **FOUNDATION (First)**           |       |        |        |         |
+| 0 | Project Skeleton & Config        | 0     | 5      | 8      | 12      |
+| 1 | Database Schema & Models         | 1     | 10     | 15     | 25      |
+| 2 | Backend Core (API structure)     | 2     | 8      | 12     | 20      |
+| 3 | Authentication & Authorization   | 3     | 8      | 15     | 25      |
+|   | **FEATURES (After foundation)**  |       |        |        |         |
+| 4 | Backend API Endpoints            | 4     | 15     | 25     | 40      |
+| 5 | Frontend Core (Layout, Nav)      | 5     | 10     | 15     | 25      |
+| 6 | Frontend Features (Pages, UI)    | 6     | 20     | 35     | 55      |
+|   | **INTEGRATION (After features)** |       |        |        |         |
+| 7 | Workflow Completeness            | 7     | 10     | 20     | 35      |
+| 8 | UI-Backend Integration           | 7     | 10     | 15     | 25      |
+|   | **QUALITY (Last)**               |       |        |        |         |
+| 9 | Error Handling                   | 8     | 8      | 12     | 18      |
+|10 | Form Validation                  | 8     | 8      | 12     | 18      |
+|11 | State & Persistence              | 8     | 6      | 10     | 15      |
+|12 | Responsive & Layout              | 8     | 6      | 8      | 12      |
+|13 | Accessibility                    | 8     | 6      | 8      | 12      |
+|14 | Performance                      | 8     | 5      | 5      | 8       |
+|   | **TOTAL**                        |       |**~135**|**~215**|**~345** |
+
+**CRITICAL: Create features in this EXACT order (0 → 14). The API assigns arch_layer based on category.**
 
 ---
 
-### A. Security & Access Control Tests
+### 0. Project Skeleton & Config Tests (Layer 0: SKELETON)
 
-Test that unauthorized access is blocked and permissions are enforced.
+Test that the project structure and configuration are properly set up.
+
+**Use category: "skeleton" or "setup" or "config"**
 
 **Required tests (examples):**
 
-- Unauthenticated user cannot access protected routes (redirect to login)
-- Regular user cannot access admin-only pages (403 or redirect)
+- Project directory structure matches specification
+- Package.json has all required dependencies
+- TypeScript/JavaScript config files are valid
+- Environment variables are properly configured
+- Build scripts work correctly
+- Development server starts without errors
+- Linting configuration is valid and passes
+- Git repository is initialized with .gitignore
+
+### 1. Database Schema & Models Tests (Layer 1: DATABASE)
+
+Test that the database schema and models are correctly defined.
+
+**Use category: "database" or "schema" or "models"**
+
+**Required tests (examples):**
+
+- All required tables/collections exist
+- Primary keys and indexes are properly defined
+- Foreign key relationships are correct
+- Required fields have NOT NULL constraints
+- Default values are set correctly
+- Migrations run successfully
+- ORM models match database schema
+- Timestamps (created_at, updated_at) are auto-populated
+- Unique constraints prevent duplicates
+- Data types match specification
+
+### 2. Backend Core (API structure) Tests (Layer 2: BACKEND_CORE)
+
+Test that the API framework and core structure are properly set up.
+
+**Use category: "backend_core" or "api_structure" or "middleware"**
+
+**Required tests (examples):**
+
+- API server starts and responds to health check
+- CORS is properly configured
+- Request/response middleware works correctly
+- Error handling middleware catches exceptions
+- Request logging is functional
+- Rate limiting is configured (if required)
+- API versioning is implemented (if required)
+- Request body parsing works for JSON
+- File upload middleware works (if required)
+- Response compression is enabled
+
+### 3. Authentication & Authorization Tests (Layer 3: AUTH)
+
+Test that security, authentication, and authorization work correctly.
+
+**Use category: "auth" or "security" or "authentication" or "authorization"**
+
+**Required tests (examples):**
+
+- User registration creates account successfully
+- User login returns valid tokens
+- Invalid credentials are rejected
+- JWT/session tokens are validated correctly
+- Token refresh mechanism works
+- Logout invalidates session
+- Password hashing is secure (bcrypt/argon2)
+- Protected routes require authentication
+- Role-based access control works
 - API endpoints return 401 for unauthenticated requests
 - API endpoints return 403 for unauthorized role access
-- Session expires after configured inactivity period
-- Logout clears all session data and tokens
-- Invalid/expired tokens are rejected
-- Each role can ONLY see their permitted menu items
-- Direct URL access to unauthorized pages is blocked
-- Sensitive operations require confirmation or re-authentication
-- Cannot access another user's data by manipulating IDs in URL
+- Session expires after configured period
 - Password reset flow works securely
-- Failed login attempts are handled (no information leakage)
 
-### B. Navigation Integrity Tests
+### 4. Backend API Endpoints Tests (Layer 4: BACKEND_FEATURES)
 
-Test that every button, link, and menu item goes to the correct place.
+Test that all business logic API endpoints work correctly.
 
-**Required tests (examples):**
-
-- Every button in sidebar navigates to correct page
-- Every menu item links to existing route
-- All CRUD action buttons (Edit, Delete, View) go to correct URLs with correct IDs
-- Back button works correctly after each navigation
-- Deep linking works (direct URL access to any page with auth)
-- Breadcrumbs reflect actual navigation path
-- 404 page shown for non-existent routes (not crash)
-- After login, user redirected to intended destination (or dashboard)
-- After logout, user redirected to login page
-- Pagination links work and preserve current filters
-- Tab navigation within pages works correctly
-- Modal close buttons return to previous state
-- Cancel buttons on forms return to previous page
-
-### C. Real Data Verification Tests
-
-Test that data is real (not mocked) and persists correctly.
+**Use category: "api_endpoints" or "backend_features" or "services"**
 
 **Required tests (examples):**
 
-- Create a record via UI with unique content → verify it appears in list
-- Create a record → refresh page → record still exists
-- Create a record → log out → log in → record still exists
-- Edit a record → verify changes persist after refresh
-- Delete a record → verify it's gone from list AND database
-- Delete a record → verify it's gone from related dropdowns
-- Filter/search → results match actual data created in test
-- Dashboard statistics reflect real record counts (create 3 items, count shows 3)
-- Reports show real aggregated data
-- Export functionality exports actual data you created
-- Related records update when parent changes
-- Timestamps are real and accurate (created_at, updated_at)
-- Data created by User A is not visible to User B (unless shared)
-- Empty state shows correctly when no data exists
+- Every entity has working GET endpoint (list)
+- Every entity has working GET endpoint (single by ID)
+- Every entity has working POST endpoint (create)
+- Every entity has working PUT/PATCH endpoint (update)
+- Every entity has working DELETE endpoint
+- Filtering/search query parameters work
+- Sorting query parameters work
+- Pagination returns correct results
+- Related entities are properly nested/expanded
+- Business logic validations are enforced
+- Data is properly sanitized before storage
 
-### D. Workflow Completeness Tests
+### 5. Frontend Core (Layout, Navigation) Tests (Layer 5: FRONTEND_CORE)
 
-Test that every workflow can be completed end-to-end through the UI.
+Test that the UI framework, layout, and navigation work correctly.
+
+**Use category: "frontend_core" or "navigation" or "layout"**
 
 **Required tests (examples):**
 
-- Every entity has working Create operation via UI form
-- Every entity has working Read/View operation (detail page loads)
-- Every entity has working Update operation (edit form saves)
-- Every entity has working Delete operation (with confirmation dialog)
-- Every status/state has a UI mechanism to transition to next state
-- Multi-step processes (wizards) can be completed end-to-end
-- Bulk operations (select all, delete selected) work
+- Application loads without JavaScript errors
+- Main layout renders correctly
+- Sidebar/navbar navigation works
+- Routing between pages works
+- 404 page shows for non-existent routes
+- Loading states display during navigation
+- Browser back/forward buttons work
+- Deep linking works (direct URL access)
+- Breadcrumbs reflect navigation path
+- Mobile navigation menu works
+
+### 6. Frontend Features (Pages, UI Components) Tests (Layer 6: FRONTEND_FEATURES)
+
+Test that all UI pages and components work correctly.
+
+**Use category: "ui_components" or "frontend_features" or "forms" or "pages"**
+
+**Required tests (examples):**
+
+- List pages display data correctly
+- Detail pages show all entity fields
+- Create forms submit data correctly
+- Edit forms pre-populate with existing data
+- Delete actions work with confirmation
+- Search/filter UI updates results
+- Pagination UI works
+- Modals open and close correctly
+- Tab components switch content
+- Dropdown menus function correctly
+- Date pickers work
+- File upload UI works
+
+### 7. Workflow Completeness Tests (Layer 7: INTEGRATION)
+
+Test that end-to-end workflows can be completed through the UI.
+
+**Use category: "workflow" or "integration"**
+
+**Required tests (examples):**
+
+- Complete CRUD cycle: Create → Read → Update → Delete
+- Multi-step processes (wizards) complete end-to-end
+- Status transitions work through full lifecycle
+- Bulk operations work (select all, delete selected)
 - Cancel/Undo operations work where applicable
-- Required fields prevent submission when empty
-- Form validation shows errors before submission
-- Successful submission shows success feedback
-- Backend workflow (e.g., user→customer conversion) has UI trigger
+- Data created in one area appears in related areas
+- Dashboard statistics reflect actual data
+- Reports show real aggregated data
+- Export functionality exports actual data
 
-### E. Error Handling Tests
-
-Test graceful handling of errors and edge cases.
-
-**Required tests (examples):**
-
-- Network failure shows user-friendly error message, not crash
-- Invalid form input shows field-level errors
-- API errors display meaningful messages to user
-- 404 responses handled gracefully (show not found page)
-- 500 responses don't expose stack traces or technical details
-- Empty search results show "no results found" message
-- Loading states shown during all async operations
-- Timeout doesn't hang the UI indefinitely
-- Submitting form with server error keeps user data in form
-- File upload errors (too large, wrong type) show clear message
-- Duplicate entry errors (e.g., email already exists) are clear
-
-### F. UI-Backend Integration Tests
+### 8. UI-Backend Integration Tests (Layer 7: INTEGRATION)
 
 Test that frontend and backend communicate correctly.
 
+**Use category: "full_stack" or "data_flow"**
+
 **Required tests (examples):**
 
-- Frontend request format matches what backend expects
-- Backend response format matches what frontend parses
-- All dropdown options come from real database data (not hardcoded)
-- Related entity selectors (e.g., "choose category") populated from DB
-- Changes in one area reflect in related areas after refresh
-- Deleting parent handles children correctly (cascade or block)
-- Filters work with actual data attributes from database
+- Frontend request format matches backend expectations
+- Backend response format matches frontend parsing
+- Dropdown options come from real database data
+- Related entity selectors populated from DB
+- Changes reflect in related areas after refresh
+- Deleting parent handles children correctly
+- Filters work with actual data attributes
 - Sort functionality sorts real data correctly
-- Pagination returns correct page of real data
-- API error responses are parsed and displayed correctly
-- Loading spinners appear during API calls
-- Optimistic updates (if used) rollback on failure
+- API error responses display correctly in UI
+- Optimistic updates rollback on failure
 
-### G. State & Persistence Tests
+### 9. Error Handling Tests (Layer 8: QUALITY)
 
-Test that state is maintained correctly across sessions and tabs.
+Test graceful handling of errors and edge cases.
 
-**Required tests (examples):**
-
-- Refresh page mid-form - appropriate behavior (data kept or cleared)
-- Close browser, reopen - session state handled correctly
-- Same user in two browser tabs - changes sync or handled gracefully
-- Browser back after form submit - no duplicate submission
-- Bookmark a page, return later - works (with auth check)
-- LocalStorage/cookies cleared - graceful re-authentication
-- Unsaved changes warning when navigating away from dirty form
-
-### H. URL & Direct Access Tests
-
-Test direct URL access and URL manipulation security.
+**Use category: "error_handling"**
 
 **Required tests (examples):**
 
-- Change entity ID in URL - cannot access others' data
-- Access /admin directly as regular user - blocked
-- Malformed URL parameters - handled gracefully (no crash)
-- Very long URL - handled correctly
-- URL with SQL injection attempt - rejected/sanitized
-- Deep link to deleted entity - shows "not found", not crash
-- Query parameters for filters are reflected in UI
-- Sharing a URL with filters preserves those filters
+- Network failure shows user-friendly error message
+- Invalid form input shows field-level errors
+- API errors display meaningful messages
+- 404 responses show not found page
+- 500 responses don't expose stack traces
+- Empty search results show message
+- Loading states shown during async operations
+- Timeout doesn't hang UI indefinitely
+- Server error keeps user data in form
 
-### I. Double-Action & Idempotency Tests
-
-Test that rapid or duplicate actions don't cause issues.
-
-**Required tests (examples):**
-
-- Double-click submit button - only one record created
-- Rapid multiple clicks on delete - only one deletion occurs
-- Submit form, hit back, submit again - appropriate behavior
-- Multiple simultaneous API calls - server handles correctly
-- Refresh during save operation - data not corrupted
-- Click same navigation link twice quickly - no issues
-- Submit button disabled during processing
-
-### J. Data Cleanup & Cascade Tests
-
-Test that deleting data cleans up properly everywhere.
-
-**Required tests (examples):**
-
-- Delete parent entity - children removed from all views
-- Delete item - removed from search results immediately
-- Delete item - statistics/counts updated immediately
-- Delete item - related dropdowns updated
-- Delete item - cached views refreshed
-- Soft delete (if applicable) - item hidden but recoverable
-- Hard delete - item completely removed from database
-
-### K. Default & Reset Tests
-
-Test that defaults and reset functionality work correctly.
-
-**Required tests (examples):**
-
-- New form shows correct default values
-- Date pickers default to sensible dates (today, not 1970)
-- Dropdowns default to correct option (or placeholder)
-- Reset button clears to defaults, not just empty
-- Clear filters button resets all filters to default
-- Pagination resets to page 1 when filters change
-- Sorting resets when changing views
-
-### L. Search & Filter Edge Cases
-
-Test search and filter functionality thoroughly.
-
-**Required tests (examples):**
-
-- Empty search shows all results (or appropriate message)
-- Search with only spaces - handled correctly
-- Search with special characters (!@#$%^&\*) - no errors
-- Search with quotes - handled correctly
-- Search with very long string - handled correctly
-- Filter combinations that return zero results - shows message
-- Filter + search + sort together - all work correctly
-- Filter persists after viewing detail and returning to list
-- Clear individual filter - works correctly
-- Search is case-insensitive (or clearly case-sensitive)
-
-### M. Form Validation Tests
+### 10. Form Validation Tests (Layer 8: QUALITY)
 
 Test all form validation rules exhaustively.
 
-**Required tests (examples):**
-
-- Required field empty - shows error, blocks submit
-- Email field with invalid email formats - shows error
-- Password field - enforces complexity requirements
-- Numeric field with letters - rejected
-- Date field with invalid date - rejected
-- Min/max length enforced on text fields
-- Min/max values enforced on numeric fields
-- Duplicate unique values rejected (e.g., duplicate email)
-- Error messages are specific (not just "invalid")
-- Errors clear when user fixes the issue
-- Server-side validation matches client-side
-- Whitespace-only input rejected for required fields
-
-### N. Feedback & Notification Tests
-
-Test that users get appropriate feedback for all actions.
+**Use category: "validation"**
 
 **Required tests (examples):**
 
-- Every successful save/create shows success feedback
-- Every failed action shows error feedback
-- Loading spinner during every async operation
-- Disabled state on buttons during form submission
-- Progress indicator for long operations (file upload)
-- Toast/notification disappears after appropriate time
-- Multiple notifications don't overlap incorrectly
-- Success messages are specific (not just "Success")
+- Required field empty shows error
+- Email field validates format
+- Password enforces complexity requirements
+- Numeric field rejects letters
+- Date field validates format
+- Min/max length enforced
+- Duplicate unique values rejected
+- Error messages are specific
+- Errors clear when fixed
+- Server-side matches client-side
 
-### O. Responsive & Layout Tests
+### 11. State & Persistence Tests (Layer 8: QUALITY)
 
-Test that the UI works on different screen sizes.
+Test that state is maintained correctly.
+
+**Use category: "quality"**
 
 **Required tests (examples):**
 
-- Desktop layout correct at 1920px width
-- Tablet layout correct at 768px width
-- Mobile layout correct at 375px width
-- No horizontal scroll on any standard viewport
-- Touch targets large enough on mobile (44px min)
-- Modals fit within viewport on mobile
-- Long text truncates or wraps correctly (no overflow)
-- Tables scroll horizontally if needed on mobile
-- Navigation collapses appropriately on mobile
+- Refresh page mid-form handles appropriately
+- Session state persists correctly
+- Browser back after submit no duplicate
+- Bookmark and return works
+- Unsaved changes warning works
 
-### P. Accessibility Tests
+### 12. Responsive & Layout Tests (Layer 8: QUALITY)
+
+Test that UI works on different screen sizes.
+
+**Use category: "responsive"**
+
+**Required tests (examples):**
+
+- Desktop layout correct at 1920px
+- Tablet layout correct at 768px
+- Mobile layout correct at 375px
+- No horizontal scroll
+- Touch targets large enough on mobile
+- Navigation collapses on mobile
+
+### 13. Accessibility Tests (Layer 8: QUALITY)
 
 Test basic accessibility compliance.
 
-**Required tests (examples):**
-
-- Tab navigation works through all interactive elements
-- Focus ring visible on all focused elements
-- Screen reader can navigate main content areas
-- ARIA labels on icon-only buttons
-- Color contrast meets WCAG AA (4.5:1 for text)
-- No information conveyed by color alone
-- Form fields have associated labels
-- Error messages announced to screen readers
-- Skip link to main content (if applicable)
-- Images have alt text
-
-### Q. Temporal & Timezone Tests
-
-Test date/time handling.
+**Use category: "accessibility"**
 
 **Required tests (examples):**
 
-- Dates display in user's local timezone
-- Created/updated timestamps accurate and formatted correctly
-- Date picker allows only valid date ranges
-- Overdue items identified correctly (timezone-aware)
-- "Today", "This Week" filters work correctly for user's timezone
-- Recurring items generate at correct times (if applicable)
-- Date sorting works correctly across months/years
+- Tab navigation works
+- Focus ring visible
+- ARIA labels on icon buttons
+- Color contrast meets WCAG AA
+- Form fields have labels
 
-### R. Concurrency & Race Condition Tests
-
-Test multi-user and race condition scenarios.
-
-**Required tests (examples):**
-
-- Two users edit same record - last save wins or conflict shown
-- Record deleted while another user viewing - graceful handling
-- List updates while user on page 2 - pagination still works
-- Rapid navigation between pages - no stale data displayed
-- API response arrives after user navigated away - no crash
-- Concurrent form submissions from same user handled
-
-### S. Export/Import Tests (if applicable)
-
-Test data export and import functionality.
-
-**Required tests (examples):**
-
-- Export all data - file contains all records
-- Export filtered data - only filtered records included
-- Import valid file - all records created correctly
-- Import duplicate data - handled correctly (skip/update/error)
-- Import malformed file - error message, no partial import
-- Export then import - data integrity preserved exactly
-
-### T. Performance Tests
+### 14. Performance Tests (Layer 8: QUALITY)
 
 Test basic performance requirements.
+
+**Use category: "performance"**
 
 **Required tests (examples):**
 
 - Page loads in <3s with 100 records
-- Page loads in <5s with 1000 records
 - Search responds in <1s
-- Infinite scroll doesn't degrade with many items
-- Large file upload shows progress
-- Memory doesn't leak on long sessions
-- No console errors during normal operation
+- No console errors during operation
 
 ---
 
