@@ -15,7 +15,6 @@ import {
   Upload,
   FileText,
   Loader2,
-  ArrowRight,
   ArrowLeft,
   Search,
   CheckCircle2,
