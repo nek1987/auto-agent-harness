@@ -40,6 +40,7 @@ from lib import (
     FailureTracker,
     FailureStats,
     ErrorInfo,
+    ensure_browser_available,
 )
 
 logger = logging.getLogger(__name__)
@@ -189,6 +190,20 @@ async def run_autonomous_agent(
 
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
+
+    # Check browser availability for standard mode (not YOLO, not analysis)
+    if not yolo_mode and mode != "analysis":
+        print("\nChecking Playwright browser availability...")
+        browser_ok, was_installed, browser_msg = ensure_browser_available(timeout=300)
+
+        if not browser_ok:
+            print(f"\nBrowser not available: {browser_msg}")
+            print("Switching to YOLO mode (browser testing disabled)")
+            yolo_mode = True
+        elif was_installed:
+            print(f"Browser was installed: {browser_msg}")
+        else:
+            print(f"Browser check: {browser_msg}")
 
     # Handle analysis mode
     if mode == "analysis":

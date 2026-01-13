@@ -32,6 +32,7 @@ class ErrorType(Enum):
     NETWORK = "network"
     TIMEOUT = "timeout"
     CONTEXT_LENGTH = "context_length"
+    BROWSER = "browser"  # Playwright/browser automation errors
     UNKNOWN = "unknown"
 
 
@@ -234,6 +235,34 @@ def is_context_length_error(error: Any) -> bool:
     return any(pattern in lower_message for pattern in context_patterns)
 
 
+def is_browser_error(error: Any) -> bool:
+    """
+    Check if an error is a Playwright/browser automation error.
+
+    Args:
+        error: The error to check
+
+    Returns:
+        True if the error is browser/Playwright related
+    """
+    message = str(error) if error else ""
+    lower_message = message.lower()
+
+    browser_patterns = [
+        "playwright",
+        "chromium",
+        "chrome is not found",
+        "browser not found",
+        "browser_install",
+        "browser_navigate",
+        "launchpersistentcontext",
+        "browsertype.launch",
+        "npx playwright install",
+        "mcp__playwright",
+    ]
+    return any(pattern in lower_message for pattern in browser_patterns)
+
+
 def extract_retry_after(error: Any) -> Optional[int]:
     """
     Extract retry-after duration from rate limit error.
@@ -285,6 +314,7 @@ def classify_error(error: Any) -> ErrorInfo:
     is_quota = is_quota_exhausted_error(error)
     is_network = is_network_error(error)
     is_context = is_context_length_error(error)
+    is_browser = is_browser_error(error)
 
     retry_after = extract_retry_after(error) if is_rate_limit else None
 
@@ -299,6 +329,10 @@ def classify_error(error: Any) -> ErrorInfo:
     elif is_rate_limit:
         error_type = ErrorType.RATE_LIMIT
         is_retryable = True
+    elif is_browser:
+        # Browser errors should switch to YOLO mode
+        error_type = ErrorType.BROWSER
+        is_retryable = False
     elif is_context:
         error_type = ErrorType.CONTEXT_LENGTH
         is_retryable = False
@@ -374,6 +408,12 @@ def get_user_friendly_message(error_info: ErrorInfo) -> str:
     if error_info.type == ErrorType.NETWORK:
         return (
             "Network error occurred. Please check your internet connection and try again."
+        )
+
+    if error_info.type == ErrorType.BROWSER:
+        return (
+            "Browser automation error. Playwright browser may not be installed. "
+            "Try running 'npx playwright install chromium' or use YOLO mode."
         )
 
     # Return original message for other errors

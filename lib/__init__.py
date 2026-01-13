@@ -15,6 +15,7 @@ Contains:
 - project_detector: Auto-detection of project type (Python, Node, Go, etc.)
 - project_scaffold: Docker scaffolding for projects
 - docker_validator: Validation of Docker configuration
+- browser_check: Playwright browser installation check
 """
 
 from .architecture_layers import (
@@ -88,6 +89,11 @@ from .docker_validator import (
     find_compose_file,
     find_dockerfiles,
     cleanup_docker_resources,
+)
+from .browser_check import (
+    check_playwright_browser,
+    install_playwright_browser,
+    ensure_browser_available,
 )
 
 __all__ = [
@@ -172,4 +178,8 @@ __all__ = [
     "find_compose_file",
     "find_dockerfiles",
     "cleanup_docker_resources",
+    # Browser check
+    "check_playwright_browser",
+    "install_playwright_browser",
+    "ensure_browser_available",
 ]
