@@ -46,6 +46,21 @@ limiter = Limiter(key_func=get_remote_address)
 # Check if authentication is required
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "true").lower() == "true"
 
+# CORS origins from environment (comma-separated list or "*" for all)
+CORS_ORIGINS_ENV = os.getenv("CORS_ORIGINS", "")
+if CORS_ORIGINS_ENV == "*":
+    CORS_ORIGINS = ["*"]
+elif CORS_ORIGINS_ENV:
+    CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_ENV.split(",")]
+else:
+    # Default origins for localhost
+    CORS_ORIGINS = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8888",
+        "http://127.0.0.1:8888",
+    ]
+
 # Public routes that don't require authentication
 PUBLIC_ROUTES = {
     "/api/auth/login",
@@ -78,15 +93,10 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS - allow only localhost origins for security
+# CORS - configurable via CORS_ORIGINS env var
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",      # Vite dev server
-        "http://127.0.0.1:5173",
-        "http://localhost:8888",      # Production
-        "http://127.0.0.1:8888",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

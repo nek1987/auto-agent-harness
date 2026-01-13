@@ -39,12 +39,12 @@ def print_step(step: int, total: int, message: str) -> None:
     print("-" * 50)
 
 
-def find_available_port(start: int = 8888, max_attempts: int = 10) -> int:
+def find_available_port(host: str = "127.0.0.1", start: int = 8888, max_attempts: int = 10) -> int:
     """Find an available port starting from the given port."""
     for port in range(start, start + max_attempts):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(("127.0.0.1", port))
+                s.bind((host, port))
                 return port
         except OSError:
             continue
@@ -153,19 +153,19 @@ def build_frontend() -> bool:
     return run_command([npm_cmd, "run", "build"], cwd=UI_DIR)
 
 
-def start_dev_server(port: int) -> tuple:
+def start_dev_server(host: str, port: int) -> tuple:
     """Start both Vite and FastAPI in development mode."""
     venv_python = get_venv_python()
 
     print("\n  Starting development servers...")
-    print(f"  - FastAPI backend: http://127.0.0.1:{port}")
+    print(f"  - FastAPI backend: http://{host}:{port}")
     print("  - Vite frontend:   http://127.0.0.1:5173")
 
     # Start FastAPI
     backend = subprocess.Popen([
         str(venv_python), "-m", "uvicorn",
         "server.main:app",
-        "--host", "127.0.0.1",
+        "--host", host,
         "--port", str(port),
         "--reload"
     ], cwd=str(ROOT))
@@ -181,16 +181,16 @@ def start_dev_server(port: int) -> tuple:
     return backend, frontend
 
 
-def start_production_server(port: int):
+def start_production_server(host: str, port: int):
     """Start FastAPI server in production mode."""
     venv_python = get_venv_python()
 
-    print(f"\n  Starting server at http://127.0.0.1:{port}")
+    print(f"\n  Starting server at http://{host}:{port}")
 
     return subprocess.Popen([
         str(venv_python), "-m", "uvicorn",
         "server.main:app",
-        "--host", "127.0.0.1",
+        "--host", host,
         "--port", str(port)
     ], cwd=str(ROOT))
 
@@ -224,6 +224,10 @@ def main() -> None:
     except ImportError:
         pass  # dotenv is optional for basic functionality
 
+    # Get server config from environment (after dotenv is loaded)
+    server_host = os.environ.get("HOST", "127.0.0.1")
+    server_port = int(os.environ.get("PORT", "8888"))
+
     # Step 3: Check Node.js
     print_step(3, total_steps, "Checking Node.js")
     if not check_node():
@@ -246,11 +250,11 @@ def main() -> None:
     step = 5 if dev_mode else 6
     print_step(step, total_steps, "Starting server")
 
-    port = find_available_port()
+    port = find_available_port(server_host, server_port)
 
     try:
         if dev_mode:
-            backend, frontend = start_dev_server(port)
+            backend, frontend = start_dev_server(server_host, port)
 
             # Open browser to Vite dev server
             time.sleep(3)
@@ -273,14 +277,14 @@ def main() -> None:
                 backend.wait()
                 frontend.wait()
         else:
-            server = start_production_server(port)
+            server = start_production_server(server_host, port)
 
-            # Open browser
+            # Open browser (always use localhost for local browser)
             time.sleep(2)
             webbrowser.open(f"http://127.0.0.1:{port}")
 
             print("\n" + "=" * 50)
-            print(f"  Server running at http://127.0.0.1:{port}")
+            print(f"  Server running at http://{server_host}:{port}")
             print("  Press Ctrl+C to stop")
             print("=" * 50)
 
