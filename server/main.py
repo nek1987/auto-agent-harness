@@ -6,10 +6,40 @@ Main entry point for the Autonomous Coding UI server.
 Provides REST API, WebSocket, and static file serving.
 """
 
+import logging
 import os
 import shutil
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+
+# ============================================================================
+# Logging Configuration
+# ============================================================================
+
+def setup_logging():
+    """Configure logging for the application."""
+    log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
+
+    # Configure root logger
+    logging.basicConfig(
+        level=logging.INFO,
+        format=log_format,
+        datefmt=date_format,
+    )
+
+    # Reduce noise from some loggers
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+    return logging.getLogger(__name__)
+
+
+# Initialize logging
+logger = setup_logging()
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -75,10 +105,17 @@ PUBLIC_ROUTES = {
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown."""
     # Startup
+    logger.info("=" * 50)
+    logger.info("Auto Agent Harness Server Starting")
+    logger.info(f"Auth enabled: {AUTH_ENABLED}")
+    logger.info(f"CORS origins: {CORS_ORIGINS}")
+    logger.info("=" * 50)
     yield
     # Shutdown - cleanup all running agents and assistant sessions
+    logger.info("Server shutting down...")
     await cleanup_all_managers()
     await cleanup_assistant_sessions()
+    logger.info("Server stopped")
 
 
 # Create FastAPI app
@@ -140,6 +177,40 @@ async def security_middleware(request: Request, call_next):
                 )
 
     return await call_next(request)
+
+
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    """Log all API requests with timing and context."""
+    # Skip logging for static assets
+    if request.url.path.startswith("/assets/") or request.url.path == "/":
+        return await call_next(request)
+
+    start_time = time.time()
+
+    # Process request
+    response = await call_next(request)
+
+    # Calculate duration
+    duration = time.time() - start_time
+
+    # Only log API requests (skip frequent polling)
+    path = request.url.path
+    if path.startswith("/api/"):
+        # Skip noisy endpoints from detailed logging
+        noisy_endpoints = ["/api/projects/", "/agent/status"]
+        is_noisy = any(noisy in path for noisy in noisy_endpoints) and response.status_code == 200
+
+        if not is_noisy or duration > 1.0:  # Log slow requests even if noisy
+            client = request.client.host if request.client else "unknown"
+            logger.info(
+                f"{request.method} {path} "
+                f"status={response.status_code} "
+                f"duration={duration:.3f}s "
+                f"client={client}"
+            )
+
+    return response
 
 
 # ============================================================================

@@ -1,0 +1,31 @@
+# Logrotate configuration for Auto Agent Harness
+# Installed to /etc/logrotate.d/auto-agent
+
+/var/log/auto-agent/*.log {
+    # Rotate daily
+    daily
+
+    # Keep 14 days of logs
+    rotate 14
+
+    # Compress old logs
+    compress
+    delaycompress
+
+    # Don't error if log is missing
+    missingok
+
+    # Don't rotate empty logs
+    notifempty
+
+    # Create new log with these permissions
+    create 644 <user> <group>
+
+    # Share rotation scripts between all logs
+    sharedscripts
+
+    # Send HUP to uvicorn to reopen logs
+    postrotate
+        systemctl kill -s HUP auto-agent 2>/dev/null || true
+    endscript
+}
