@@ -31,7 +31,7 @@ export function LoginForm() {
         {/* Logo / Title */}
         <div className="text-center mb-8">
           <h1 className="font-display text-4xl font-bold tracking-tight uppercase text-[var(--color-neo-text)]">
-            AutoCoder
+            Auto Agent Harness
           </h1>
           <p className="text-[var(--color-neo-text-secondary)] mt-2">
             Autonomous Coding Agent Control Panel

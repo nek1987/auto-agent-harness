@@ -6,7 +6,7 @@ import { useCelebration } from './hooks/useCelebration'
 import { useAuthStore, setupTokenRefresh } from './lib/auth'
 import { LoginForm } from './components/LoginForm'
 
-const STORAGE_KEY = 'autocoder-selected-project'
+const STORAGE_KEY = 'auto-agent-harness-selected-project'
 import { ProjectSelector } from './components/ProjectSelector'
 import { KanbanBoard } from './components/KanbanBoard'
 import { AgentControl } from './components/AgentControl'
@@ -168,7 +168,7 @@ function App() {
             {/* Logo and Title */}
             <div className="flex items-center gap-4">
               <h1 className="font-display text-2xl font-bold tracking-tight uppercase">
-                AutoCoder
+                Auto Agent Harness
               </h1>
               {user && (
                 <span className="text-sm text-white/70">
@@ -229,7 +229,7 @@ function App() {
         {!selectedProject ? (
           <div className="neo-empty-state mt-12">
             <h2 className="font-display text-2xl font-bold mb-2">
-              Welcome to AutoCoder
+              Welcome to Auto Agent Harness
             </h2>
             <p className="text-[var(--color-neo-text-secondary)] mb-4">
               Select a project from the dropdown above or create a new one to get started.

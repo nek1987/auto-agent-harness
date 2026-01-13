@@ -146,10 +146,10 @@ setup_oauth_mount() {
 services:
   auto-agent-harness:
     volumes:
-      - autocoder-data:/app/data
+      - auto-agent-harness-data:/app/data
       - ${WORKSPACE_DIR:-./workspace}:/workspace
       # Mount Claude credentials from host
-      - ${HOME}/.claude:/home/autocoder/.claude:ro
+      - ${HOME}/.claude:/home/auto-agent/.claude:ro
 EOF
 
     echo -e "${GREEN}Created docker-compose.override.yml with OAuth mount${NC}"
@@ -192,10 +192,10 @@ setup_oauth_extract() {
 services:
   auto-agent-harness:
     volumes:
-      - autocoder-data:/app/data
+      - auto-agent-harness-data:/app/data
       - \${WORKSPACE_DIR:-./workspace}:/workspace
       # Mount extracted credentials
-      - ./.docker-credentials:/home/autocoder/.claude:ro
+      - ./.docker-credentials:/home/auto-agent/.claude:ro
 EOF
 
     echo -e "${GREEN}Created docker-compose.override.yml with extracted credentials${NC}"

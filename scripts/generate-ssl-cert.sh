@@ -56,7 +56,7 @@ echo ""
 openssl req -x509 -nodes -days "$DAYS" -newkey rsa:2048 \
     -keyout "$CERT_DIR/server.key" \
     -out "$CERT_DIR/server.crt" \
-    -subj "/C=XX/ST=Development/L=Local/O=AutoCoder/CN=$DOMAIN" \
+    -subj "/C=XX/ST=Development/L=Local/O=Auto-Agent-Harness/CN=$DOMAIN" \
     -addext "subjectAltName=DNS:$DOMAIN,DNS:localhost,IP:127.0.0.1,IP:0.0.0.0" \
     2>/dev/null
 

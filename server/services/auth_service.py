@@ -24,7 +24,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 # Data directory for users storage
-DATA_DIR = Path(os.getenv("DATA_DIR", Path.home() / ".autocoder"))
+DATA_DIR = Path(os.getenv("DATA_DIR", Path.home() / ".auto-agent-harness"))
 USERS_FILE = DATA_DIR / "users.json"
 
 

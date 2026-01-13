@@ -99,7 +99,7 @@ npm run lint     # Run ESLint
 ### Project Registry
 
 Projects can be stored in any directory. The registry maps project names to paths using SQLite:
-- **All platforms**: `~/.autocoder/registry.db`
+- **All platforms**: `~/.auto-agent-harness/registry.db`
 
 The registry uses:
 - SQLite database with SQLAlchemy ORM
@@ -270,7 +270,7 @@ cm.rollback(cp.id)  # Restore to checkpoint
 
 ### Project Structure for Generated Apps
 
-Projects can be stored in any directory (registered in `~/.autocoder/registry.db`). Each project contains:
+Projects can be stored in any directory (registered in `~/.auto-agent-harness/registry.db`). Each project contains:
 - `prompts/app_spec.txt` - Application specification (XML format)
 - `prompts/initializer_prompt.md` - First session prompt
 - `prompts/coding_prompt.md` - Continuation session prompt

@@ -162,7 +162,7 @@ class SpecAnalyzer:
             temp_dir: Temporary directory for Claude SDK (optional)
         """
         self.model = model
-        self.temp_dir = temp_dir or Path.home() / ".autocoder" / "spec_analysis"
+        self.temp_dir = temp_dir or Path.home() / ".auto-agent-harness" / "spec_analysis"
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
     async def analyze(self, spec_content: str) -> SpecAnalysisResult:

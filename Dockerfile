@@ -34,7 +34,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Create non-root user for security
-RUN groupadd -r autocoder && useradd -r -g autocoder autocoder
+RUN groupadd -r auto-agent && useradd -r -g auto-agent auto-agent
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -49,17 +49,17 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY --chown=autocoder:autocoder . .
+COPY --chown=auto-agent:auto-agent . .
 
 # Copy built UI from builder stage
-COPY --from=ui-builder --chown=autocoder:autocoder /app/ui/dist /app/ui/dist
+COPY --from=ui-builder --chown=auto-agent:auto-agent /app/ui/dist /app/ui/dist
 
 # Create directories for data
 RUN mkdir -p /app/data /workspace && \
-    chown -R autocoder:autocoder /app /workspace
+    chown -R auto-agent:auto-agent /app /workspace
 
 # Switch to non-root user
-USER autocoder
+USER auto-agent
 
 # Expose port
 EXPOSE 8888

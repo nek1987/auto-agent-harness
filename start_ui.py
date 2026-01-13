@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-AutoCoder UI Launcher
-=====================
+Auto Agent Harness UI Launcher
+==============================
 
 Automated launcher that handles all setup:
 1. Creates/activates Python virtual environment
@@ -216,7 +216,7 @@ def main() -> None:
     dev_mode = "--dev" in sys.argv
 
     print("=" * 50)
-    print("  AutoCoder UI Setup")
+    print("  Auto Agent Harness UI Setup")
     print("=" * 50)
 
     total_steps = 6 if not dev_mode else 5

@@ -60,7 +60,7 @@ services:
 
     volumes:
       # Persistent data storage
-      - autocoder-data:/app/data
+      - auto-agent-harness-data:/app/data
 
       # Workspace for projects
       - ${WORKSPACE_DIR:-./workspace}:/workspace
@@ -68,10 +68,10 @@ services:
       # OAuth Credentials (uncomment ONE of these for OAuth mode):
       #
       # Option A: Mount host credentials (local Docker)
-      # - ${HOME}/.claude:/home/autocoder/.claude:ro
+      # - ${HOME}/.claude:/home/auto-agent/.claude:ro
       #
       # Option B: Mount extracted credentials (remote server)
-      # - ./.docker-credentials:/home/autocoder/.claude:ro
+      # - ./.docker-credentials:/home/auto-agent/.claude:ro
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8888/api/health"]
@@ -96,7 +96,7 @@ services:
       - /tmp
 
 volumes:
-  autocoder-data:
+  auto-agent-harness-data:
     driver: local
 
 # ============================================================================

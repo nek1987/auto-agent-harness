@@ -3,10 +3,10 @@ Project Registry Module
 =======================
 
 Cross-platform project registry for storing project name to path mappings.
-Uses SQLite database stored at DATA_DIR/registry.db (default: ~/.autocoder/).
+Uses SQLite database stored at DATA_DIR/registry.db (default: ~/.auto-agent-harness/).
 
 Environment Variables:
-- DATA_DIR: Override default config directory (default: ~/.autocoder)
+- DATA_DIR: Override default config directory (default: ~/.auto-agent-harness)
 """
 
 import logging
@@ -81,7 +81,7 @@ def get_config_dir() -> Path:
     """
     Get the config directory.
 
-    Uses DATA_DIR environment variable if set, otherwise ~/.autocoder/
+    Uses DATA_DIR environment variable if set, otherwise ~/.auto-agent-harness/
 
     Returns:
         Path to config directory (created if it doesn't exist)
@@ -91,7 +91,7 @@ def get_config_dir() -> Path:
     if data_dir:
         config_dir = Path(data_dir)
     else:
-        config_dir = Path.home() / ".autocoder"
+        config_dir = Path.home() / ".auto-agent-harness"
 
     config_dir.mkdir(parents=True, exist_ok=True)
     return config_dir

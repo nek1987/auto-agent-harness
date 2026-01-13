@@ -35,7 +35,7 @@ class PathSecurityConfig:
         if data_dir:
             self._data_dir = Path(data_dir).resolve()
         else:
-            self._data_dir = Path.home() / ".autocoder"
+            self._data_dir = Path.home() / ".auto-agent-harness"
 
         self._require_localhost = os.getenv("REQUIRE_LOCALHOST", "true").lower() == "true"
 

@@ -237,14 +237,14 @@ claude login
 ./scripts/setup-docker-auth.sh --oauth-extract
 
 # 4. Copy to server
-rsync -avz . user@server:/opt/autocoder/auto-agent-harness/
+rsync -avz . user@server:/opt/auto-agent-harness/auto-agent-harness/
 ```
 
 #### On Server:
 
 ```bash
 # 1. Navigate to directory
-cd /opt/autocoder/auto-agent-harness
+cd /opt/auto-agent-harness/auto-agent-harness
 
 # 2. Start
 docker-compose up -d --build
@@ -263,10 +263,10 @@ cd auto-agent-harness
 ./scripts/setup-docker-auth.sh --oauth-extract
 
 # Copy updated credentials to server
-rsync -avz .docker-credentials/ user@server:/opt/autocoder/auto-agent-harness/.docker-credentials/
+rsync -avz .docker-credentials/ user@server:/opt/auto-agent-harness/auto-agent-harness/.docker-credentials/
 
 # On server: restart container
-ssh user@server "cd /opt/autocoder/auto-agent-harness && docker-compose restart"
+ssh user@server "cd /opt/auto-agent-harness/auto-agent-harness && docker-compose restart"
 ```
 
 ---
@@ -288,7 +288,7 @@ After installation (any mode), you can import existing projects.
 
 ```bash
 # 1. Copy project to workspace
-cp -r /path/to/your-project /opt/autocoder/workspace/
+cp -r /path/to/your-project /opt/auto-agent-harness/workspace/
 
 # 2. Register via API
 curl -X POST http://localhost:8888/api/projects/import \
@@ -330,7 +330,7 @@ python start.py
 ### Directory Structure
 
 ```
-/opt/autocoder/
+/opt/auto-agent-harness/
 ├── auto-agent-harness/     # Application repository
 │   ├── docker-compose.yml
 │   ├── Dockerfile
@@ -351,16 +351,16 @@ python start.py
 ```nginx
 server {
     listen 80;
-    server_name autocoder.your-domain.com;
+    server_name auto-agent-harness.your-domain.com;
     return 301 https://$server_name$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name autocoder.your-domain.com;
+    server_name auto-agent-harness.your-domain.com;
 
-    ssl_certificate /etc/letsencrypt/live/autocoder.your-domain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/autocoder.your-domain.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/auto-agent-harness.your-domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/auto-agent-harness.your-domain.com/privkey.pem;
 
     location / {
         proxy_pass http://127.0.0.1:8888;
@@ -390,7 +390,7 @@ server {
 claude login
 
 # Docker mode - check volume mount
-docker-compose exec auto-agent-harness ls -la /home/autocoder/.claude/
+docker-compose exec auto-agent-harness ls -la /home/auto-agent/.claude/
 ```
 
 ### Problem: "API key invalid"
@@ -467,11 +467,11 @@ docker-compose build --no-cache && docker-compose up -d
 docker-compose exec auto-agent-harness bash
 
 # Backup data
-docker run --rm -v autocoder-data:/data -v $(pwd):/backup \
-  alpine tar czf /backup/autocoder-backup.tar.gz /data
+docker run --rm -v auto-agent-harness-data:/data -v $(pwd):/backup \
+  alpine tar czf /backup/auto-agent-harness-backup.tar.gz /data
 
 # Check credentials in container
-docker-compose exec auto-agent-harness cat /home/autocoder/.claude/.credentials.json | head -c 100
+docker-compose exec auto-agent-harness cat /home/auto-agent/.claude/.credentials.json | head -c 100
 ```
 
 ---
@@ -504,10 +504,10 @@ git clone https://github.com/nek1987/auto-agent-harness.git
 cd auto-agent-harness
 claude login
 ./scripts/setup-docker-auth.sh --oauth-extract
-rsync -avz . user@server:/opt/autocoder/auto-agent-harness/
+rsync -avz . user@server:/opt/auto-agent-harness/auto-agent-harness/
 
 # Server
-cd /opt/autocoder/auto-agent-harness
+cd /opt/auto-agent-harness/auto-agent-harness
 docker-compose up -d --build
 ```
 

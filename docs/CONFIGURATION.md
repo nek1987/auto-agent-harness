@@ -21,7 +21,7 @@ Choose the configuration that matches your deployment:
 | [AUTH_ENABLED](#auth_enabled) | `true` | No | Enable UI authentication |
 | [JWT_SECRET_KEY](#jwt_secret_key) | auto | Production: Yes | JWT signing secret |
 | [DEFAULT_ADMIN_PASSWORD](#default_admin_password) | `admin` | No | Initial admin password |
-| [DATA_DIR](#data_dir) | `~/.autocoder` | No | Data storage directory |
+| [DATA_DIR](#data_dir) | `~/.auto-agent-harness` | No | Data storage directory |
 | [ALLOWED_ROOT_DIRECTORY](#allowed_root_directory) | None | Docker: Yes | File operation sandbox |
 | [REQUIRE_LOCALHOST](#require_localhost) | `true` | No | Localhost-only access |
 | [HOST](#host) | `0.0.0.0` | No | Server bind address |
@@ -39,7 +39,7 @@ Choose the configuration that matches your deployment:
 | AUTH_ENABLED | `true` | `true` | `true` |
 | JWT_SECRET_KEY | optional | **required** | **required** |
 | DEFAULT_ADMIN_PASSWORD | `admin` | **change it** | **change it** |
-| DATA_DIR | ~/.autocoder | /app/data | /app/data |
+| DATA_DIR | ~/.auto-agent-harness | /app/data | /app/data |
 | ALLOWED_ROOT_DIRECTORY | unset | /workspace | /workspace |
 | REQUIRE_LOCALHOST | `true` | `false` | `false` |
 | HOST | 127.0.0.1 | 0.0.0.0 | 0.0.0.0 |
@@ -134,7 +134,7 @@ DEFAULT_ADMIN_PASSWORD=MyStr0ng!Pass#123  # Production (16+ chars)
 | Property | Value |
 |----------|-------|
 | **Type** | Absolute path |
-| **Default** | `~/.autocoder` (expands to home directory) |
+| **Default** | `~/.auto-agent-harness` (expands to home directory) |
 | **Modes** | All |
 | **Required** | No |
 
@@ -145,9 +145,9 @@ Storage directory for persistent application data:
 - `credentials.json` - API credentials
 
 ```bash
-DATA_DIR=~/.autocoder        # Native mode default
+DATA_DIR=~/.auto-agent-harness        # Native mode default
 DATA_DIR=/app/data           # Docker mode
-DATA_DIR=/var/lib/autocoder  # Custom location
+DATA_DIR=/var/lib/auto-agent-harness  # Custom location
 ```
 
 **Note**: This path is always allowed for file access regardless of `ALLOWED_ROOT_DIRECTORY`.
@@ -197,7 +197,7 @@ Host directory mounted as `/workspace` inside the Docker container. This is wher
 
 ```bash
 WORKSPACE_DIR=./workspace              # Relative to docker-compose.yml
-WORKSPACE_DIR=/opt/autocoder/projects  # Absolute path
+WORKSPACE_DIR=/opt/auto-agent-harness/projects  # Absolute path
 ```
 
 **Note**: Ensure the directory exists and has proper permissions:
@@ -328,7 +328,7 @@ Webhook URL for sending progress notifications. Useful for monitoring dashboards
 - Agent completes a feature
 
 ```bash
-PROGRESS_N8N_WEBHOOK_URL=https://n8n.example.com/webhook/autocoder
+PROGRESS_N8N_WEBHOOK_URL=https://n8n.example.com/webhook/auto-agent-harness
 ```
 
 **Payload format**:
