@@ -6,6 +6,7 @@ Provides login, logout, refresh, and user management endpoints.
 Uses httpOnly cookies for secure token storage.
 """
 
+import os
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response, Depends
@@ -65,8 +66,11 @@ class UserInfo(BaseModel):
 # Cookie Configuration
 # ============================================================================
 
-COOKIE_SECURE = True  # Set to False for local HTTP development
-COOKIE_SAMESITE = "strict"
+# Cookie security settings from environment
+# COOKIE_SECURE: Set to "false" for HTTP, "true" for HTTPS
+# COOKIE_SAMESITE: "strict", "lax", or "none"
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"
+COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax")
 
 
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:

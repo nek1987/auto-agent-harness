@@ -153,22 +153,30 @@ def build_frontend() -> bool:
     return run_command([npm_cmd, "run", "build"], cwd=UI_DIR)
 
 
-def start_dev_server(host: str, port: int) -> tuple:
+def start_dev_server(host: str, port: int, ssl_certfile: str = None, ssl_keyfile: str = None) -> tuple:
     """Start both Vite and FastAPI in development mode."""
     venv_python = get_venv_python()
 
+    protocol = "https" if ssl_certfile else "http"
     print("\n  Starting development servers...")
-    print(f"  - FastAPI backend: http://{host}:{port}")
+    print(f"  - FastAPI backend: {protocol}://{host}:{port}")
     print("  - Vite frontend:   http://127.0.0.1:5173")
 
-    # Start FastAPI
-    backend = subprocess.Popen([
+    # Build uvicorn command
+    cmd = [
         str(venv_python), "-m", "uvicorn",
         "server.main:app",
         "--host", host,
         "--port", str(port),
         "--reload"
-    ], cwd=str(ROOT))
+    ]
+
+    # Add SSL parameters if provided
+    if ssl_certfile and ssl_keyfile:
+        cmd.extend(["--ssl-certfile", ssl_certfile, "--ssl-keyfile", ssl_keyfile])
+
+    # Start FastAPI
+    backend = subprocess.Popen(cmd, cwd=str(ROOT))
 
     # Start Vite with API port env var for proxy configuration
     npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
@@ -181,18 +189,26 @@ def start_dev_server(host: str, port: int) -> tuple:
     return backend, frontend
 
 
-def start_production_server(host: str, port: int):
+def start_production_server(host: str, port: int, ssl_certfile: str = None, ssl_keyfile: str = None):
     """Start FastAPI server in production mode."""
     venv_python = get_venv_python()
 
-    print(f"\n  Starting server at http://{host}:{port}")
+    protocol = "https" if ssl_certfile else "http"
+    print(f"\n  Starting server at {protocol}://{host}:{port}")
 
-    return subprocess.Popen([
+    # Build uvicorn command
+    cmd = [
         str(venv_python), "-m", "uvicorn",
         "server.main:app",
         "--host", host,
         "--port", str(port)
-    ], cwd=str(ROOT))
+    ]
+
+    # Add SSL parameters if provided
+    if ssl_certfile and ssl_keyfile:
+        cmd.extend(["--ssl-certfile", ssl_certfile, "--ssl-keyfile", ssl_keyfile])
+
+    return subprocess.Popen(cmd, cwd=str(ROOT))
 
 
 def main() -> None:
@@ -228,6 +244,35 @@ def main() -> None:
     server_host = os.environ.get("HOST", "127.0.0.1")
     server_port = int(os.environ.get("PORT", "8888"))
 
+    # SSL configuration
+    https_enabled = os.environ.get("HTTPS_ENABLED", "false").lower() == "true"
+    ssl_certfile = os.environ.get("SSL_CERTFILE")
+    ssl_keyfile = os.environ.get("SSL_KEYFILE")
+
+    # Validate SSL config if HTTPS is enabled
+    if https_enabled:
+        if not ssl_certfile or not ssl_keyfile:
+            print("ERROR: HTTPS_ENABLED=true but SSL_CERTFILE or SSL_KEYFILE not set")
+            sys.exit(1)
+        ssl_cert_path = Path(ssl_certfile)
+        ssl_key_path = Path(ssl_keyfile)
+        # Handle relative paths
+        if not ssl_cert_path.is_absolute():
+            ssl_cert_path = ROOT / ssl_cert_path
+        if not ssl_key_path.is_absolute():
+            ssl_key_path = ROOT / ssl_key_path
+        if not ssl_cert_path.exists():
+            print(f"ERROR: SSL certificate not found: {ssl_cert_path}")
+            sys.exit(1)
+        if not ssl_key_path.exists():
+            print(f"ERROR: SSL key not found: {ssl_key_path}")
+            sys.exit(1)
+        ssl_certfile = str(ssl_cert_path)
+        ssl_keyfile = str(ssl_key_path)
+    else:
+        ssl_certfile = None
+        ssl_keyfile = None
+
     # Step 3: Check Node.js
     print_step(3, total_steps, "Checking Node.js")
     if not check_node():
@@ -252,9 +297,11 @@ def main() -> None:
 
     port = find_available_port(server_host, server_port)
 
+    protocol = "https" if https_enabled else "http"
+
     try:
         if dev_mode:
-            backend, frontend = start_dev_server(server_host, port)
+            backend, frontend = start_dev_server(server_host, port, ssl_certfile, ssl_keyfile)
 
             # Open browser to Vite dev server
             time.sleep(3)
@@ -277,14 +324,14 @@ def main() -> None:
                 backend.wait()
                 frontend.wait()
         else:
-            server = start_production_server(server_host, port)
+            server = start_production_server(server_host, port, ssl_certfile, ssl_keyfile)
 
             # Open browser (always use localhost for local browser)
             time.sleep(2)
-            webbrowser.open(f"http://127.0.0.1:{port}")
+            webbrowser.open(f"{protocol}://127.0.0.1:{port}")
 
             print("\n" + "=" * 50)
-            print(f"  Server running at http://{server_host}:{port}")
+            print(f"  Server running at {protocol}://{server_host}:{port}")
             print("  Press Ctrl+C to stop")
             print("=" * 50)
 

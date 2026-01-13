@@ -149,6 +149,13 @@ users.json
 settings.json
 .docker-credentials/
 
+# SSL Certificates (sensitive)
+certs/
+*.pem
+*.crt
+*.key
+!scripts/generate-ssl-cert.sh
+
 # ===================
 # Misc
 # ===================
