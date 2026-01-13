@@ -5,7 +5,8 @@
  * 1. Upload - Drag and drop or select file
  * 2. Validate - Show validation results
  * 3. Analyze (optional) - Deep analysis with Claude
- * 4. Import - Import to project
+ * 4. Review & Refine - Accept/reject suggestions
+ * 5. Import - Import to project and start agent
  */
 
 import { useState, useCallback } from 'react'
@@ -18,17 +19,20 @@ import {
   ArrowLeft,
   Search,
   CheckCircle2,
+  Zap,
+  Play,
 } from 'lucide-react'
 import {
   validateSpec,
   analyzeSpec,
+  refineSpec,
   importSpecToProject,
   type SpecValidationResponse,
   type SpecAnalysisResponse,
 } from '../lib/api'
-import { SpecAnalysisReport } from './SpecAnalysisReport'
+import { SpecAnalysisReport, type SuggestionDecisions } from './SpecAnalysisReport'
 
-type Step = 'upload' | 'validating' | 'review' | 'analyzing' | 'importing' | 'complete'
+type Step = 'upload' | 'validating' | 'review' | 'analyzing' | 'refining' | 'importing' | 'complete'
 
 interface ImportSpecModalProps {
   isOpen: boolean
@@ -131,6 +135,56 @@ export function ImportSpecModal({
     }
   }
 
+  const handleRefine = async (decisions: SuggestionDecisions) => {
+    if (!specContent || !analysis) return
+
+    setStep('refining')
+    setError(null)
+
+    // Build feedback string from decisions
+    const feedbackParts: string[] = []
+
+    if (decisions.accepted.length > 0) {
+      const acceptedImprovements = decisions.accepted.map(i => analysis.improvements[i]).filter(Boolean)
+      if (acceptedImprovements.length > 0) {
+        feedbackParts.push(`Apply these improvements: ${acceptedImprovements.join('; ')}`)
+      }
+    }
+
+    if (decisions.rejected.length > 0) {
+      const rejectedImprovements = decisions.rejected.map(i => analysis.improvements[i]).filter(Boolean)
+      if (rejectedImprovements.length > 0) {
+        feedbackParts.push(`Do NOT apply these suggestions: ${rejectedImprovements.join('; ')}`)
+      }
+    }
+
+    if (decisions.customFeedback.trim()) {
+      feedbackParts.push(`Additional requirements: ${decisions.customFeedback.trim()}`)
+    }
+
+    const feedback = feedbackParts.join('\n\n')
+
+    try {
+      const result = await refineSpec(specContent, feedback)
+      if (result.success && result.refined_spec) {
+        // Update spec content with refined version
+        setSpecContent(result.refined_spec)
+        // Re-validate the refined spec
+        const validationResult = await validateSpec(result.refined_spec)
+        setValidation(validationResult)
+        // Clear analysis to allow re-analysis
+        setAnalysis(null)
+        setStep('review')
+      } else {
+        setError(result.message || 'Refinement failed')
+        setStep('review')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Refinement failed')
+      setStep('review')
+    }
+  }
+
   const handleImport = async () => {
     if (!specContent || !validation?.is_valid) return
 
@@ -179,8 +233,9 @@ export function ImportSpecModal({
               {step === 'validating' && 'Validating...'}
               {step === 'review' && 'Review Spec'}
               {step === 'analyzing' && 'Analyzing with Claude...'}
+              {step === 'refining' && 'Refining Spec...'}
               {step === 'importing' && 'Importing...'}
-              {step === 'complete' && 'Import Complete!'}
+              {step === 'complete' && 'Ready to Start!'}
             </h2>
           </div>
           <button onClick={handleClose} className="neo-btn neo-btn-ghost p-2">
@@ -278,6 +333,8 @@ export function ImportSpecModal({
                 validation={validation}
                 analysis={analysis}
                 showActions={false}
+                interactive={!!analysis}
+                onRefine={handleRefine}
               />
 
               {error && (
@@ -308,10 +365,23 @@ export function ImportSpecModal({
                   className="neo-btn neo-btn-primary"
                   disabled={!validation.is_valid}
                 >
-                  Import Spec
-                  <ArrowRight size={16} />
+                  <Play size={16} />
+                  Import & Start Agent
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Refining Step */}
+          {step === 'refining' && (
+            <div className="text-center py-12">
+              <Loader2 size={48} className="animate-spin mx-auto mb-4 text-[var(--color-neo-progress)]" />
+              <p className="text-[var(--color-neo-text-secondary)]">
+                Applying your changes...
+              </p>
+              <p className="text-sm text-[var(--color-neo-text-secondary)] mt-2">
+                Claude is refining the spec based on your feedback
+              </p>
             </div>
           )}
 
@@ -345,23 +415,29 @@ export function ImportSpecModal({
                 <CheckCircle2 size={32} />
               </div>
               <h3 className="font-display font-bold text-xl mb-2">
-                Spec Imported!
+                Spec Imported Successfully!
               </h3>
-              <p className="text-[var(--color-neo-text-secondary)]">
+              <p className="text-[var(--color-neo-text-secondary)] mb-4">
                 The spec has been imported to project <span className="font-bold">{projectName}</span>
               </p>
               {importPath && (
-                <p className="text-sm font-mono text-[var(--color-neo-text-secondary)] mt-2">
+                <p className="text-sm font-mono text-[var(--color-neo-text-secondary)] mb-4">
                   {importPath}
                 </p>
               )}
+              <div className="flex items-center justify-center gap-2 p-3 bg-[var(--color-neo-progress)] bg-opacity-20 border-2 border-[var(--color-neo-progress)] rounded mb-4">
+                <Zap size={18} className="text-[var(--color-neo-progress)]" />
+                <span className="text-sm font-bold">
+                  The initializer agent will start automatically
+                </span>
+              </div>
               <div className="flex justify-center gap-3 mt-6">
                 <button onClick={handleClose} className="neo-btn neo-btn-ghost">
                   Close
                 </button>
                 <button onClick={handleComplete} className="neo-btn neo-btn-primary">
-                  Go to Project
-                  <ArrowRight size={16} />
+                  <Play size={16} />
+                  Start Agent
                 </button>
               </div>
             </div>

@@ -6,11 +6,13 @@
  * - Quality score badge
  * - Validation checklist
  * - Strengths (green)
- * - Improvements (yellow)
+ * - Improvements (with accept/reject buttons)
  * - Critical issues (red)
+ * - Custom feedback field
  * - Action buttons
  */
 
+import { useState } from 'react'
 import {
   CheckCircle2,
   AlertCircle,
@@ -18,17 +20,27 @@ import {
   Info,
   Sparkles,
   Target,
+  Check,
+  X,
+  MessageSquare,
 } from 'lucide-react'
 import type { SpecValidationResponse, SpecAnalysisResponse } from '../lib/api'
+
+export interface SuggestionDecisions {
+  accepted: number[]
+  rejected: number[]
+  customFeedback: string
+}
 
 interface SpecAnalysisReportProps {
   validation: SpecValidationResponse
   analysis?: SpecAnalysisResponse | null
   onApprove?: () => void
-  onRefine?: () => void
+  onRefine?: (decisions: SuggestionDecisions) => void
   onCancel?: () => void
   showActions?: boolean
   isLoading?: boolean
+  interactive?: boolean
 }
 
 function getScoreColor(score: number): string {
@@ -53,7 +65,51 @@ export function SpecAnalysisReport({
   onCancel,
   showActions = true,
   isLoading = false,
+  interactive = false,
 }: SpecAnalysisReportProps) {
+  // Track which suggestions are accepted/rejected in interactive mode
+  const [acceptedSuggestions, setAcceptedSuggestions] = useState<Set<number>>(new Set())
+  const [rejectedSuggestions, setRejectedSuggestions] = useState<Set<number>>(new Set())
+  const [customFeedback, setCustomFeedback] = useState('')
+
+  const handleAcceptSuggestion = (index: number) => {
+    setAcceptedSuggestions(prev => {
+      const next = new Set(prev)
+      next.add(index)
+      return next
+    })
+    setRejectedSuggestions(prev => {
+      const next = new Set(prev)
+      next.delete(index)
+      return next
+    })
+  }
+
+  const handleRejectSuggestion = (index: number) => {
+    setRejectedSuggestions(prev => {
+      const next = new Set(prev)
+      next.add(index)
+      return next
+    })
+    setAcceptedSuggestions(prev => {
+      const next = new Set(prev)
+      next.delete(index)
+      return next
+    })
+  }
+
+  const handleRefineClick = () => {
+    if (onRefine) {
+      onRefine({
+        accepted: Array.from(acceptedSuggestions),
+        rejected: Array.from(rejectedSuggestions),
+        customFeedback,
+      })
+    }
+  }
+
+  const hasDecisions = acceptedSuggestions.size > 0 || rejectedSuggestions.size > 0 || customFeedback.trim().length > 0
+
   const sections = [
     { name: 'Project Name', present: validation.has_project_name },
     { name: 'Overview', present: validation.has_overview },
@@ -218,14 +274,70 @@ export function SpecAnalysisReport({
                 <Info size={16} />
                 Suggested Improvements
               </h4>
-              <ul className="space-y-1">
-                {analysis.improvements.map((improvement, i) => (
-                  <li key={i} className="text-sm text-blue-700 flex items-start gap-2">
-                    <span className="font-bold">{i + 1}.</span>
-                    {improvement}
-                  </li>
-                ))}
+              <ul className="space-y-2">
+                {analysis.improvements.map((improvement, i) => {
+                  const isAccepted = acceptedSuggestions.has(i)
+                  const isRejected = rejectedSuggestions.has(i)
+
+                  return (
+                    <li
+                      key={i}
+                      className={`text-sm flex items-start gap-2 p-2 -mx-2 rounded transition-colors ${
+                        isAccepted ? 'bg-green-100 text-green-700' :
+                        isRejected ? 'bg-red-100 text-red-400 line-through' :
+                        'text-blue-700'
+                      }`}
+                    >
+                      <span className="font-bold flex-shrink-0">{i + 1}.</span>
+                      <span className="flex-1">{improvement}</span>
+                      {interactive && (
+                        <div className="flex gap-1 flex-shrink-0 ml-2">
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptSuggestion(i)}
+                            className={`p-1 rounded border-2 transition-colors ${
+                              isAccepted
+                                ? 'bg-green-500 text-white border-green-600'
+                                : 'bg-white text-green-600 border-green-300 hover:bg-green-50'
+                            }`}
+                            title="Accept this suggestion"
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRejectSuggestion(i)}
+                            className={`p-1 rounded border-2 transition-colors ${
+                              isRejected
+                                ? 'bg-red-500 text-white border-red-600'
+                                : 'bg-white text-red-600 border-red-300 hover:bg-red-50'
+                            }`}
+                            title="Reject this suggestion"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
+            </div>
+          )}
+
+          {/* Custom Feedback */}
+          {interactive && (
+            <div className="p-4 bg-purple-50 border-3 border-purple-300">
+              <h4 className="font-bold text-purple-700 flex items-center gap-2 mb-2">
+                <MessageSquare size={16} />
+                Your Suggestions
+              </h4>
+              <textarea
+                value={customFeedback}
+                onChange={(e) => setCustomFeedback(e.target.value)}
+                placeholder="Add your own suggestions or modifications here..."
+                className="w-full p-3 border-2 border-purple-200 rounded resize-none h-24 text-sm focus:border-purple-400 focus:outline-none"
+              />
             </div>
           )}
 
@@ -267,9 +379,18 @@ export function SpecAnalysisReport({
             </button>
           )}
           <div className="flex-1" />
-          {onRefine && (
+          {onRefine && interactive && hasDecisions && (
             <button
-              onClick={onRefine}
+              onClick={handleRefineClick}
+              className="neo-btn neo-btn-secondary"
+              disabled={isLoading || !validation.is_valid}
+            >
+              Apply Changes & Refine
+            </button>
+          )}
+          {onRefine && !interactive && (
+            <button
+              onClick={() => onRefine({ accepted: [], rejected: [], customFeedback: '' })}
               className="neo-btn neo-btn-secondary"
               disabled={isLoading || !validation.is_valid}
             >
@@ -285,6 +406,19 @@ export function SpecAnalysisReport({
               {isLoading ? 'Importing...' : 'Import Spec'}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Interactive mode refine button (shown even when showActions is false) */}
+      {!showActions && interactive && hasDecisions && onRefine && (
+        <div className="flex justify-end pt-4 border-t-3 border-[var(--color-neo-border)]">
+          <button
+            onClick={handleRefineClick}
+            className="neo-btn neo-btn-secondary"
+            disabled={isLoading || !validation.is_valid}
+          >
+            Apply Changes & Refine
+          </button>
         </div>
       )}
     </div>

@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { ChevronDown, Plus, FolderOpen, Loader2, Download } from 'lucide-react'
+import { ChevronDown, Plus, FolderOpen, Loader2, Download, Trash2 } from 'lucide-react'
 import type { ProjectSummary } from '../lib/types'
 import { NewProjectModal } from './NewProjectModal'
 import { ImportProjectModal } from './ImportProjectModal'
+import { DeleteProjectModal } from './DeleteProjectModal'
 
 interface ProjectSelectorProps {
   projects: ProjectSummary[]
   selectedProject: string | null
   onSelectProject: (name: string | null) => void
+  onProjectDeleted?: () => void
   isLoading: boolean
 }
 
@@ -15,15 +17,34 @@ export function ProjectSelector({
   projects,
   selectedProject,
   onSelectProject,
+  onProjectDeleted,
   isLoading,
 }: ProjectSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [showNewProjectModal, setShowNewProjectModal] = useState(false)
   const [showImportProjectModal, setShowImportProjectModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
 
   const handleProjectCreated = (projectName: string) => {
     onSelectProject(projectName)
     setIsOpen(false)
+  }
+
+  const handleDeleteClick = (e: React.MouseEvent, projectName: string) => {
+    e.stopPropagation()
+    setProjectToDelete(projectName)
+    setShowDeleteModal(true)
+  }
+
+  const handleProjectDeleted = () => {
+    // If deleted project was selected, clear selection
+    if (projectToDelete === selectedProject) {
+      onSelectProject(null)
+    }
+    setShowDeleteModal(false)
+    setProjectToDelete(null)
+    onProjectDeleted?.()
   }
 
   const selectedProjectData = projects.find(p => p.name === selectedProject)
@@ -72,28 +93,39 @@ export function ProjectSelector({
             {projects.length > 0 ? (
               <div className="max-h-[300px] overflow-auto">
                 {projects.map(project => (
-                  <button
+                  <div
                     key={project.name}
-                    onClick={() => {
-                      onSelectProject(project.name)
-                      setIsOpen(false)
-                    }}
-                    className={`w-full neo-dropdown-item flex items-center justify-between ${
+                    className={`flex items-center group ${
                       project.name === selectedProject
                         ? 'bg-[var(--color-neo-pending)]'
                         : ''
                     }`}
                   >
-                    <span className="flex items-center gap-2">
-                      <FolderOpen size={16} />
-                      {project.name}
-                    </span>
-                    {project.stats.total > 0 && (
-                      <span className="text-sm font-mono">
-                        {project.stats.passing}/{project.stats.total}
+                    <button
+                      onClick={() => {
+                        onSelectProject(project.name)
+                        setIsOpen(false)
+                      }}
+                      className="flex-1 neo-dropdown-item flex items-center justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <FolderOpen size={16} />
+                        {project.name}
                       </span>
-                    )}
-                  </button>
+                      {project.stats.total > 0 && (
+                        <span className="text-sm font-mono">
+                          {project.stats.passing}/{project.stats.total}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteClick(e, project.name)}
+                      className="p-2 opacity-0 group-hover:opacity-100 hover:text-[var(--color-neo-danger)] transition-all"
+                      title="Delete project"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -145,6 +177,19 @@ export function ProjectSelector({
         onClose={() => setShowImportProjectModal(false)}
         onProjectCreated={handleProjectCreated}
       />
+
+      {/* Delete Project Modal */}
+      {projectToDelete && (
+        <DeleteProjectModal
+          isOpen={showDeleteModal}
+          projectName={projectToDelete}
+          onClose={() => {
+            setShowDeleteModal(false)
+            setProjectToDelete(null)
+          }}
+          onDeleted={handleProjectDeleted}
+        />
+      )}
     </div>
   )
 }

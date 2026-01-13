@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useProjects, useFeatures, useAgentStatus } from './hooks/useProjects'
 import { useProjectWebSocket } from './hooks/useWebSocket'
 import { useFeatureSound } from './hooks/useFeatureSound'
 import { useCelebration } from './hooks/useCelebration'
 import { useAuthStore, setupTokenRefresh } from './lib/auth'
+import { startAgent } from './lib/api'
 import { LoginForm } from './components/LoginForm'
 
 const STORAGE_KEY = 'auto-agent-harness-selected-project'
@@ -19,13 +21,16 @@ import { AgentThought } from './components/AgentThought'
 import { ActivityPanel } from './components/ActivityPanel'
 import { AssistantFAB } from './components/AssistantFAB'
 import { AssistantPanel } from './components/AssistantPanel'
-import { Plus, Loader2, LogOut } from 'lucide-react'
+import { ImportSpecModal } from './components/ImportSpecModal'
+import { SpecCreationChat } from './components/SpecCreationChat'
+import { Plus, Loader2, LogOut, FileQuestion, Upload, Bot } from 'lucide-react'
 import type { Feature } from './lib/types'
 
 function App() {
   // Authentication state
   const { isAuthenticated, user, logout, checkAuth } = useAuthStore()
   const [authChecked, setAuthChecked] = useState(false)
+  const queryClient = useQueryClient()
 
   // Initialize selected project from localStorage
   const [selectedProject, setSelectedProject] = useState<string | null>(() => {
@@ -41,6 +46,8 @@ function App() {
   const [debugOpen, setDebugOpen] = useState(false)
   const [debugPanelHeight, setDebugPanelHeight] = useState(288) // Default height
   const [assistantOpen, setAssistantOpen] = useState(false)
+  const [showImportSpecModal, setShowImportSpecModal] = useState(false)
+  const [showSpecChat, setShowSpecChat] = useState(false)
 
   // Check authentication on mount
   useEffect(() => {
@@ -80,6 +87,41 @@ function App() {
     }
   }, [])
 
+  // Handle project deletion - refresh project list
+  const handleProjectDeleted = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['projects'] })
+  }, [queryClient])
+
+  // Handle spec import completion
+  const handleSpecImportComplete = useCallback(async () => {
+    setShowImportSpecModal(false)
+    // Refresh projects to update has_spec status
+    await queryClient.invalidateQueries({ queryKey: ['projects'] })
+    // Auto-start the initializer agent
+    if (selectedProject) {
+      try {
+        await startAgent(selectedProject, false)
+      } catch (err) {
+        console.error('Failed to start agent after spec import:', err)
+      }
+    }
+  }, [queryClient, selectedProject])
+
+  // Handle spec creation completion via Claude chat
+  const handleSpecComplete = useCallback(async (_specPath: string, yoloMode: boolean = false) => {
+    setShowSpecChat(false)
+    // Refresh projects to update has_spec status
+    await queryClient.invalidateQueries({ queryKey: ['projects'] })
+    // Auto-start the initializer agent
+    if (selectedProject) {
+      try {
+        await startAgent(selectedProject, yoloMode)
+      } catch (err) {
+        console.error('Failed to start agent after spec creation:', err)
+      }
+    }
+  }, [queryClient, selectedProject])
+
   // Validate stored project exists (clear if project was deleted)
   useEffect(() => {
     if (selectedProject && projects && !projects.some(p => p.name === selectedProject)) {
@@ -115,7 +157,11 @@ function App() {
 
       // Escape : Close modals
       if (e.key === 'Escape') {
-        if (assistantOpen) {
+        if (showSpecChat) {
+          setShowSpecChat(false)
+        } else if (showImportSpecModal) {
+          setShowImportSpecModal(false)
+        } else if (assistantOpen) {
           setAssistantOpen(false)
         } else if (showAddFeature) {
           setShowAddFeature(false)
@@ -129,7 +175,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedProject, showAddFeature, selectedFeature, debugOpen, assistantOpen])
+  }, [selectedProject, showAddFeature, selectedFeature, debugOpen, assistantOpen, showSpecChat, showImportSpecModal])
 
   // Combine WebSocket progress with feature data
   const progress = wsState.progress.total > 0 ? wsState.progress : {
@@ -184,6 +230,7 @@ function App() {
                 projects={projects ?? []}
                 selectedProject={selectedProject}
                 onSelectProject={handleSelectProject}
+                onProjectDeleted={handleProjectDeleted}
                 isLoading={projectsLoading}
               />
 
@@ -237,52 +284,90 @@ function App() {
               Select a project from the dropdown above or create a new one to get started.
             </p>
           </div>
-        ) : (
-          <div className="space-y-8">
-            {/* Progress Dashboard */}
-            <ProgressDashboard
-              passing={progress.passing}
-              total={progress.total}
-              percentage={progress.percentage}
-              isConnected={wsState.isConnected}
-            />
+        ) : (() => {
+          // Find the selected project data
+          const selectedProjectData = projects?.find(p => p.name === selectedProject)
+          const hasNoSpec = selectedProjectData && selectedProjectData.has_spec === false
 
-            {/* Agent Thought - shows latest agent narrative */}
-            <AgentThought
-              logs={wsState.logs}
-              agentStatus={wsState.agentStatus}
-            />
-
-            {/* Activity Panel - shows current tool and feature */}
-            <ActivityPanel
-              logs={wsState.logs}
-              agentStatus={wsState.agentStatus}
-            />
-
-            {/* Initializing Features State - show when agent is running but no features yet */}
-            {features &&
-             features.pending.length === 0 &&
-             features.in_progress.length === 0 &&
-             features.done.length === 0 &&
-             wsState.agentStatus === 'running' && (
-              <div className="neo-card p-8 text-center">
-                <Loader2 size={32} className="animate-spin mx-auto mb-4 text-[var(--color-neo-progress)]" />
-                <h3 className="font-display font-bold text-xl mb-2">
-                  Initializing Features...
-                </h3>
-                <p className="text-[var(--color-neo-text-secondary)]">
-                  The agent is reading your spec and creating features. This may take a moment.
+          // Show NoSpecState if project has no spec
+          if (hasNoSpec) {
+            return (
+              <div className="neo-card p-12 text-center max-w-2xl mx-auto mt-12">
+                <FileQuestion size={64} className="mx-auto mb-6 text-[var(--color-neo-text-secondary)]" />
+                <h2 className="font-display text-2xl font-bold mb-3">
+                  No Specification Found
+                </h2>
+                <p className="text-[var(--color-neo-text-secondary)] mb-8">
+                  To start working on this project, you need an app specification.
+                  You can import an existing spec file or create one interactively with Claude.
                 </p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <button
+                    onClick={() => setShowImportSpecModal(true)}
+                    className="neo-btn neo-btn-secondary"
+                  >
+                    <Upload size={18} />
+                    Import Spec File
+                  </button>
+                  <button
+                    onClick={() => setShowSpecChat(true)}
+                    className="neo-btn neo-btn-primary"
+                  >
+                    <Bot size={18} />
+                    Create with Claude
+                  </button>
+                </div>
               </div>
-            )}
+            )
+          }
 
-            {/* Kanban Board */}
-            <KanbanBoard
-              features={features}
-              onFeatureClick={setSelectedFeature}
-            />
-          </div>
-        )}
+          return (
+            <div className="space-y-8">
+              {/* Progress Dashboard */}
+              <ProgressDashboard
+                passing={progress.passing}
+                total={progress.total}
+                percentage={progress.percentage}
+                isConnected={wsState.isConnected}
+              />
+
+              {/* Agent Thought - shows latest agent narrative */}
+              <AgentThought
+                logs={wsState.logs}
+                agentStatus={wsState.agentStatus}
+              />
+
+              {/* Activity Panel - shows current tool and feature */}
+              <ActivityPanel
+                logs={wsState.logs}
+                agentStatus={wsState.agentStatus}
+              />
+
+              {/* Initializing Features State - show when agent is running but no features yet */}
+              {features &&
+               features.pending.length === 0 &&
+               features.in_progress.length === 0 &&
+               features.done.length === 0 &&
+               wsState.agentStatus === 'running' && (
+                <div className="neo-card p-8 text-center">
+                  <Loader2 size={32} className="animate-spin mx-auto mb-4 text-[var(--color-neo-progress)]" />
+                  <h3 className="font-display font-bold text-xl mb-2">
+                    Initializing Features...
+                  </h3>
+                  <p className="text-[var(--color-neo-text-secondary)]">
+                    The agent is reading your spec and creating features. This may take a moment.
+                  </p>
+                </div>
+              )}
+
+              {/* Kanban Board */}
+              <KanbanBoard
+                features={features}
+                onFeatureClick={setSelectedFeature}
+              />
+            </div>
+          )
+        })()}
       </main>
 
       {/* Add Feature Modal */}
@@ -326,6 +411,28 @@ function App() {
             onClose={() => setAssistantOpen(false)}
           />
         </>
+      )}
+
+      {/* Import Spec Modal */}
+      {showImportSpecModal && selectedProject && (
+        <ImportSpecModal
+          isOpen={showImportSpecModal}
+          projectName={selectedProject}
+          onClose={() => setShowImportSpecModal(false)}
+          onImportComplete={handleSpecImportComplete}
+        />
+      )}
+
+      {/* Spec Creation Chat (full-screen) */}
+      {showSpecChat && selectedProject && (
+        <div className="fixed inset-0 z-50 bg-[var(--color-neo-bg)]">
+          <SpecCreationChat
+            projectName={selectedProject}
+            onComplete={handleSpecComplete}
+            onCancel={() => setShowSpecChat(false)}
+            onExitToProject={() => setShowSpecChat(false)}
+          />
+        </div>
       )}
     </div>
   )
