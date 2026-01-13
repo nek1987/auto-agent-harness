@@ -162,6 +162,13 @@ class RefineSpecResponse(BaseModel):
     message: str
 
 
+class EnhanceSpecResponse(BaseModel):
+    """Response with enhanced spec."""
+    enhanced_spec: str
+    changes_made: list[str]
+    message: str
+
+
 # ============================================================================
 # Endpoints
 # ============================================================================
@@ -451,6 +458,30 @@ async def refine_spec(request: RefineSpecRequest):
     except Exception as e:
         logger.error(f"Refinement failed: {e}")
         raise HTTPException(status_code=500, detail=f"Refinement failed: {str(e)}")
+
+
+@router.post("/enhance", response_model=EnhanceSpecResponse)
+async def enhance_spec(request: ValidateSpecRequest):
+    """
+    Enhance an incomplete spec using Claude.
+
+    Takes any text/partial spec and generates a complete
+    app_spec.txt with all required sections filled in.
+    This is used for auto-enhancement when a user uploads
+    an incomplete or minimal spec.
+    """
+    analyzer = _get_analyzer()
+
+    try:
+        result = await analyzer.enhance_spec(request.spec_content)
+        return EnhanceSpecResponse(
+            enhanced_spec=result["enhanced_spec"],
+            changes_made=result["changes_made"],
+            message=result["message"],
+        )
+    except Exception as e:
+        logger.error(f"Enhancement failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Enhancement failed: {str(e)}")
 
 
 @router.get("/analysis/{project_name}")

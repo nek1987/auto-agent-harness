@@ -25,13 +25,14 @@ import {
   validateSpec,
   analyzeSpec,
   refineSpec,
+  enhanceSpec,
   importSpecToProject,
   type SpecValidationResponse,
   type SpecAnalysisResponse,
 } from '../lib/api'
 import { SpecAnalysisReport, type SuggestionDecisions } from './SpecAnalysisReport'
 
-type Step = 'upload' | 'validating' | 'review' | 'analyzing' | 'refining' | 'importing' | 'complete'
+type Step = 'upload' | 'validating' | 'enhancing' | 'review' | 'analyzing' | 'refining' | 'importing' | 'complete'
 
 interface ImportSpecModalProps {
   isOpen: boolean
@@ -103,6 +104,23 @@ export function ImportSpecModal({
       // Validate
       const result = await validateSpec(content)
       setValidation(result)
+
+      // AUTO-ENHANCE: если spec неполный - запускаем ИИ доработку
+      if (result.score < 60 || !result.is_valid) {
+        setStep('enhancing')
+        try {
+          const enhanced = await enhanceSpec(content)
+          setSpecContent(enhanced.enhanced_spec)
+          // Re-validate the enhanced spec
+          const newValidation = await validateSpec(enhanced.enhanced_spec)
+          setValidation(newValidation)
+        } catch (enhanceErr) {
+          // Если enhance не сработал - продолжаем с оригиналом
+          console.error('Auto-enhance failed:', enhanceErr)
+          setError('Auto-enhancement failed, but you can still import the original spec')
+        }
+      }
+
       setStep('review')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to read file')
@@ -185,7 +203,7 @@ export function ImportSpecModal({
   }
 
   const handleImport = async () => {
-    if (!specContent || !validation?.is_valid) return
+    if (!specContent) return  // принимаем любой spec, без проверки is_valid
 
     setStep('importing')
     setError(null)
@@ -230,6 +248,7 @@ export function ImportSpecModal({
             <h2 className="font-display font-bold text-xl text-[#1a1a1a]">
               {step === 'upload' && 'Import Spec File'}
               {step === 'validating' && 'Validating...'}
+              {step === 'enhancing' && 'Enhancing with Claude...'}
               {step === 'review' && 'Review Spec'}
               {step === 'analyzing' && 'Analyzing with Claude...'}
               {step === 'refining' && 'Refining Spec...'}
@@ -315,6 +334,27 @@ export function ImportSpecModal({
             </div>
           )}
 
+          {/* Enhancing Step */}
+          {step === 'enhancing' && (
+            <div className="text-center py-12">
+              <Loader2 size={48} className="animate-spin mx-auto mb-4 text-[var(--color-neo-progress)]" />
+              <p className="font-bold text-lg mb-2">
+                Incomplete spec detected
+              </p>
+              <p className="text-[var(--color-neo-text-secondary)]">
+                Claude is enhancing your spec with missing sections...
+              </p>
+              <p className="text-sm text-[var(--color-neo-text-secondary)] mt-2">
+                This may take a few seconds
+              </p>
+              {file && (
+                <p className="text-sm text-[var(--color-neo-text-secondary)] mt-2 font-mono">
+                  {file.name}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Review Step */}
           {step === 'review' && validation && (
             <div>
@@ -353,7 +393,6 @@ export function ImportSpecModal({
                   <button
                     onClick={handleAnalyze}
                     className="neo-btn neo-btn-secondary"
-                    disabled={!validation.is_valid}
                   >
                     <Search size={16} />
                     Analyze with Claude
@@ -362,7 +401,6 @@ export function ImportSpecModal({
                 <button
                   onClick={handleImport}
                   className="neo-btn neo-btn-primary"
-                  disabled={!validation.is_valid}
                 >
                   <Play size={16} />
                   Import & Start Agent

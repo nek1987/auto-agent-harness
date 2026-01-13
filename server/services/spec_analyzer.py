@@ -138,6 +138,43 @@ Make minimal changes that address the feedback.
 Output ONLY the refined spec XML, no additional text or explanation."""
 
 
+ENHANCE_PROMPT_TEMPLATE = """You are an expert at creating application specifications.
+
+## User's Input
+The user has provided the following text as a starting point for their app specification:
+
+<input>
+{spec_content}
+</input>
+
+## Task
+Create a COMPLETE and VALID app_spec.txt based on this input.
+
+Even if the input is minimal (just a description or idea), you should:
+1. Extract the project concept and goals
+2. Generate a full XML specification with ALL required sections
+3. Make reasonable assumptions for missing details
+4. Ensure the spec is immediately usable by a developer
+
+## Required XML Structure
+Your output MUST include these sections:
+- <project_name> - derive from the input or create an appropriate name
+- <overview> - describe the project based on user's input
+- <technology_stack> - suggest appropriate technologies
+- <feature_count> - estimate based on scope
+- <core_features> - list main features derived from the concept
+
+Optional but recommended sections:
+- <database_schema>
+- <api_endpoints>
+- <implementation_steps>
+- <success_criteria>
+
+## Output Format
+Output ONLY the complete XML spec, no additional text.
+Start with <?xml version="1.0"?> and use <project_specification> as root element."""
+
+
 class SpecAnalyzer:
     """
     Analyzes app_spec.txt files using Claude for quality and completeness.
@@ -239,6 +276,61 @@ class SpecAnalyzer:
         except Exception as e:
             logger.error(f"Refinement failed: {e}")
             raise RuntimeError(f"Failed to generate refinements: {e}")
+
+    async def enhance_spec(self, spec_content: str) -> dict:
+        """
+        Enhance an incomplete spec into a complete app_spec.txt.
+
+        Takes any text input (even minimal descriptions) and generates
+        a complete XML specification with all required sections.
+
+        Args:
+            spec_content: The incomplete or minimal spec content
+
+        Returns:
+            Dict with enhanced_spec, changes_made, and message
+        """
+        try:
+            enhanced = await self._query_claude(
+                ENHANCE_PROMPT_TEMPLATE.format(spec_content=spec_content)
+            )
+            enhanced = enhanced.strip()
+
+            # Determine what changes were made
+            changes_made = []
+            validation_before = validate_spec_structure(spec_content)
+            validation_after = validate_spec_structure(enhanced)
+
+            if not validation_before.has_project_name and validation_after.has_project_name:
+                changes_made.append("Added project name")
+            if not validation_before.has_overview and validation_after.has_overview:
+                changes_made.append("Added project overview")
+            if not validation_before.has_tech_stack and validation_after.has_tech_stack:
+                changes_made.append("Added technology stack")
+            if not validation_before.has_feature_count and validation_after.has_feature_count:
+                changes_made.append("Added feature count")
+            if not validation_before.has_core_features and validation_after.has_core_features:
+                changes_made.append("Added core features list")
+            if not validation_before.has_database_schema and validation_after.has_database_schema:
+                changes_made.append("Added database schema")
+            if not validation_before.has_api_endpoints and validation_after.has_api_endpoints:
+                changes_made.append("Added API endpoints")
+            if not validation_before.has_implementation_steps and validation_after.has_implementation_steps:
+                changes_made.append("Added implementation steps")
+            if not validation_before.has_success_criteria and validation_after.has_success_criteria:
+                changes_made.append("Added success criteria")
+
+            if not changes_made:
+                changes_made.append("Reformatted and validated XML structure")
+
+            return {
+                "enhanced_spec": enhanced,
+                "changes_made": changes_made,
+                "message": f"Spec enhanced successfully. Score improved from {validation_before.score} to {validation_after.score}.",
+            }
+        except Exception as e:
+            logger.error(f"Enhancement failed: {e}")
+            raise RuntimeError(f"Failed to enhance spec: {e}")
 
     async def analyze_streaming(
         self,

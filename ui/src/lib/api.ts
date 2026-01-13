@@ -395,3 +395,16 @@ export async function refineSpec(
     body: JSON.stringify({ spec_content: specContent, feedback }),
   })
 }
+
+export interface EnhanceSpecResponse {
+  enhanced_spec: string
+  changes_made: string[]
+  message: string
+}
+
+export async function enhanceSpec(specContent: string): Promise<EnhanceSpecResponse> {
+  return fetchJSON('/spec/enhance', {
+    method: 'POST',
+    body: JSON.stringify({ spec_content: specContent }),
+  })
+}
