@@ -323,6 +323,10 @@ async def bash_security_hook(input_data, tool_use_id=None, context=None):
     Returns:
         Empty dict to allow, or {"decision": "block", "reason": "..."} to block
     """
+    # Guard against None input to prevent 'NoneType' has no attribute 'items' errors
+    if input_data is None:
+        return {}
+
     if input_data.get("tool_name") != "Bash":
         return {}
 

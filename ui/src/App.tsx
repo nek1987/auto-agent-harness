@@ -16,6 +16,7 @@ import { AddFeatureForm } from './components/AddFeatureForm'
 import { FeatureModal } from './components/FeatureModal'
 import { DebugLogViewer } from './components/DebugLogViewer'
 import { AgentThought } from './components/AgentThought'
+import { ActivityPanel } from './components/ActivityPanel'
 import { AssistantFAB } from './components/AssistantFAB'
 import { AssistantPanel } from './components/AssistantPanel'
 import { Plus, Loader2, LogOut } from 'lucide-react'
@@ -204,6 +205,7 @@ function App() {
                     projectName={selectedProject}
                     status={wsState.agentStatus}
                     yoloMode={agentStatusData?.yolo_mode ?? false}
+                    lastLogTimestamp={wsState.logs.length > 0 ? wsState.logs[wsState.logs.length - 1].timestamp : null}
                   />
                 </>
               )}
@@ -247,6 +249,12 @@ function App() {
 
             {/* Agent Thought - shows latest agent narrative */}
             <AgentThought
+              logs={wsState.logs}
+              agentStatus={wsState.agentStatus}
+            />
+
+            {/* Activity Panel - shows current tool and feature */}
+            <ActivityPanel
               logs={wsState.logs}
               agentStatus={wsState.agentStatus}
             />

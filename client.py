@@ -160,6 +160,14 @@ async def post_tool_use_hook(tool_name: str, tool_input: dict, tool_result: str)
         tool_input: Input parameters passed to the tool
         tool_result: Result returned by the tool
     """
+    # Guard against None values to prevent 'NoneType' has no attribute 'items' errors
+    if tool_name is None:
+        tool_name = "unknown"
+    if tool_input is None:
+        tool_input = {}
+    if tool_result is None:
+        tool_result = ""
+
     timestamp = datetime.now(timezone.utc).isoformat()
 
     # Truncate large results for logging

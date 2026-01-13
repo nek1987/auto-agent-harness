@@ -114,7 +114,7 @@ export interface SetupStatus {
 }
 
 // WebSocket message types
-export type WSMessageType = 'progress' | 'feature_update' | 'log' | 'agent_status' | 'pong'
+export type WSMessageType = 'progress' | 'feature_update' | 'log' | 'agent_status' | 'pong' | 'activity'
 
 export interface WSProgressMessage {
   type: 'progress'
@@ -145,12 +145,25 @@ export interface WSPongMessage {
   type: 'pong'
 }
 
+// Activity tracking for current tool/feature execution
+export type ActivityEvent = 'tool_start' | 'tool_end' | 'feature_start'
+
+export interface WSActivityMessage {
+  type: 'activity'
+  event: ActivityEvent
+  tool?: string           // Tool name when event is tool_start/tool_end
+  feature_id?: number     // Feature ID when event is feature_start
+  feature_name?: string   // Feature name when event is feature_start
+  timestamp: string
+}
+
 export type WSMessage =
   | WSProgressMessage
   | WSFeatureUpdateMessage
   | WSLogMessage
   | WSAgentStatusMessage
   | WSPongMessage
+  | WSActivityMessage
 
 // ============================================================================
 // Spec Chat Types

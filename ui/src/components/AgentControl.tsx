@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Play, Pause, Square, Loader2, Zap } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Play, Pause, Square, Loader2, Zap, Clock } from 'lucide-react'
 import {
   useStartAgent,
   useStopAgent,
@@ -12,10 +12,30 @@ interface AgentControlProps {
   projectName: string
   status: AgentStatus
   yoloMode?: boolean  // From server status - whether currently running in YOLO mode
+  lastLogTimestamp?: string | null  // ISO timestamp of last log for idle detection
 }
 
-export function AgentControl({ projectName, status, yoloMode = false }: AgentControlProps) {
+export function AgentControl({ projectName, status, yoloMode = false, lastLogTimestamp }: AgentControlProps) {
   const [yoloEnabled, setYoloEnabled] = useState(false)
+  const [idleSeconds, setIdleSeconds] = useState(0)
+
+  // Update idle timer every second when agent is running
+  useEffect(() => {
+    if (status !== 'running' || !lastLogTimestamp) {
+      setIdleSeconds(0)
+      return
+    }
+
+    const updateIdle = () => {
+      const lastTime = new Date(lastLogTimestamp).getTime()
+      const now = Date.now()
+      setIdleSeconds(Math.floor((now - lastTime) / 1000))
+    }
+
+    updateIdle() // Initial update
+    const interval = setInterval(updateIdle, 1000)
+    return () => clearInterval(interval)
+  }, [status, lastLogTimestamp])
 
   const startAgent = useStartAgent(projectName)
   const stopAgent = useStopAgent(projectName)
@@ -37,6 +57,27 @@ export function AgentControl({ projectName, status, yoloMode = false }: AgentCon
     <div className="flex items-center gap-2">
       {/* Status Indicator */}
       <StatusIndicator status={status} />
+
+      {/* Idle Timer Warning - shown when agent is idle for too long */}
+      {status === 'running' && idleSeconds > 30 && (
+        <div
+          className={`flex items-center gap-1 px-2 py-1 border-3 border-[var(--color-neo-border)] ${
+            idleSeconds > 60
+              ? 'bg-[var(--color-neo-danger)] animate-pulse'
+              : 'bg-[var(--color-neo-pending)]'
+          }`}
+          title="Time since last activity"
+        >
+          <Clock size={14} className={idleSeconds > 60 ? 'text-white' : 'text-yellow-900'} />
+          <span
+            className={`font-mono font-bold text-sm ${
+              idleSeconds > 60 ? 'text-white' : 'text-yellow-900'
+            }`}
+          >
+            {idleSeconds}s
+          </span>
+        </div>
+      )}
 
       {/* YOLO Mode Indicator - shown when running in YOLO mode */}
       {(status === 'running' || status === 'paused') && yoloMode && (
