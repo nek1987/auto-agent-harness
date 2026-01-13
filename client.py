@@ -148,7 +148,7 @@ BUILTIN_TOOLS = [
 # Enhanced Hooks (SDK 0.1.19 / Claude Code v2.1.1)
 # ============================================================================
 
-def post_tool_use_hook(tool_name: str, tool_input: dict, tool_result: str) -> None:
+async def post_tool_use_hook(tool_name: str, tool_input: dict, tool_result: str) -> None:
     """
     PostToolUse hook for logging tool executions.
 
@@ -179,7 +179,7 @@ def post_tool_use_hook(tool_name: str, tool_input: dict, tool_result: str) -> No
         logger.debug(f"  Result: {result_preview}")
 
 
-def session_start_hook(session_id: str, **kwargs) -> None:
+async def session_start_hook(session_id: str, **kwargs) -> None:
     """
     SessionStart hook called when agent session begins.
 
@@ -191,7 +191,7 @@ def session_start_hook(session_id: str, **kwargs) -> None:
     logger.info(f"[{timestamp}] Agent session started: {session_id}")
 
 
-def session_end_hook(session_id: str, reason: str = "completed", **kwargs) -> None:
+async def session_end_hook(session_id: str, reason: str = "completed", **kwargs) -> None:
     """
     SessionEnd hook called when agent session ends.
 
