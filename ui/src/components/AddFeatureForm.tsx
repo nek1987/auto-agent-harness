@@ -74,29 +74,29 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b-3 border-[var(--color-neo-border)]">
-          <h2 className="font-display text-2xl font-bold">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b-3 border-[var(--color-neo-border)]">
+          <h2 className="font-display text-xl sm:text-2xl font-bold">
             {isBug ? 'Report Bug' : 'Add Feature'}
           </h2>
           <button
             onClick={onClose}
-            className="neo-btn neo-btn-ghost p-2"
+            className="neo-btn neo-btn-ghost p-2 min-h-[44px] min-w-[44px]"
           >
-            <X size={24} />
+            <X size={20} className="sm:w-6 sm:h-6" />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
           {/* Error Message */}
           {error && (
-            <div className="flex items-center gap-3 p-4 bg-[var(--color-neo-danger)] text-white border-3 border-[var(--color-neo-border)]">
-              <AlertCircle size={20} />
-              <span>{error}</span>
+            <div className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-[var(--color-neo-danger)] text-white border-3 border-[var(--color-neo-border)]">
+              <AlertCircle size={18} className="flex-shrink-0" />
+              <span className="text-sm sm:text-base">{error}</span>
               <button
                 type="button"
                 onClick={() => setError(null)}
-                className="ml-auto"
+                className="ml-auto min-w-[32px] min-h-[32px] flex items-center justify-center"
               >
                 <X size={16} />
               </button>
@@ -108,36 +108,36 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
             <button
               type="button"
               onClick={() => setItemType('feature')}
-              className={`neo-btn flex-1 flex items-center justify-center gap-2 ${
+              className={`neo-btn flex-1 flex items-center justify-center gap-2 min-h-[48px] ${
                 !isBug ? 'neo-btn-primary' : 'neo-btn-ghost'
               }`}
             >
               <Sparkles size={18} />
-              Feature
+              <span className="text-sm sm:text-base">Feature</span>
             </button>
             <button
               type="button"
               onClick={() => setItemType('bug')}
-              className={`neo-btn flex-1 flex items-center justify-center gap-2 ${
+              className={`neo-btn flex-1 flex items-center justify-center gap-2 min-h-[48px] ${
                 isBug ? 'neo-btn-danger' : 'neo-btn-ghost'
               }`}
             >
               <Bug size={18} />
-              Bug Report
+              <span className="text-sm sm:text-base">Bug Report</span>
             </button>
           </div>
 
           {isBug && (
-            <div className="p-3 bg-[var(--color-neo-danger)]/10 border-3 border-[var(--color-neo-danger)] text-sm">
+            <div className="p-3 bg-[var(--color-neo-danger)]/10 border-3 border-[var(--color-neo-danger)] text-xs sm:text-sm">
               <strong>Bug Mode:</strong> AI agent will analyze this bug and automatically create fix features.
             </div>
           )}
 
           {/* Category & Priority Row - hidden for bugs */}
           {!isBug && (
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <div className="flex-1">
-                <label className="block font-display font-bold mb-2 uppercase text-sm">
+                <label className="block font-display font-bold mb-2 uppercase text-xs sm:text-sm">
                   Category
                 </label>
                 <input
@@ -145,12 +145,12 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   placeholder="e.g., Authentication, UI, API"
-                  className="neo-input"
+                  className="neo-input min-h-[48px]"
                   required={!isBug}
                 />
               </div>
-              <div className="w-32">
-                <label className="block font-display font-bold mb-2 uppercase text-sm">
+              <div className="w-full sm:w-32">
+                <label className="block font-display font-bold mb-2 uppercase text-xs sm:text-sm">
                   Priority
                 </label>
                 <input
@@ -159,7 +159,7 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
                   onChange={(e) => setPriority(e.target.value)}
                   placeholder="Auto"
                   min="1"
-                  className="neo-input"
+                  className="neo-input min-h-[48px]"
                 />
               </div>
             </div>
@@ -167,7 +167,7 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
 
           {/* Name */}
           <div>
-            <label className="block font-display font-bold mb-2 uppercase text-sm">
+            <label className="block font-display font-bold mb-2 uppercase text-xs sm:text-sm">
               {isBug ? 'Bug Title' : 'Feature Name'}
             </label>
             <input
@@ -175,14 +175,14 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={isBug ? "e.g., Login button not responding" : "e.g., User login form"}
-              className="neo-input"
+              className="neo-input min-h-[48px]"
               required
             />
           </div>
 
           {/* Description */}
           <div>
-            <label className="block font-display font-bold mb-2 uppercase text-sm">
+            <label className="block font-display font-bold mb-2 uppercase text-xs sm:text-sm">
               {isBug ? 'Bug Description' : 'Description'}
             </label>
             <textarea
@@ -196,13 +196,13 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
 
           {/* Steps */}
           <div>
-            <label className="block font-display font-bold mb-2 uppercase text-sm">
+            <label className="block font-display font-bold mb-2 uppercase text-xs sm:text-sm">
               {isBug ? 'Steps to Reproduce (Optional)' : 'Test Steps (Optional)'}
             </label>
             <div className="space-y-2">
               {steps.map((step, index) => (
                 <div key={step.id} className="flex gap-2">
-                  <span className="neo-input w-12 text-center flex-shrink-0 flex items-center justify-center">
+                  <span className="neo-input w-10 sm:w-12 text-center flex-shrink-0 flex items-center justify-center min-h-[48px]">
                     {index + 1}
                   </span>
                   <input
@@ -210,13 +210,13 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
                     value={step.value}
                     onChange={(e) => handleStepChange(step.id, e.target.value)}
                     placeholder="Describe this step..."
-                    className="neo-input flex-1"
+                    className="neo-input flex-1 min-h-[48px]"
                   />
                   {steps.length > 1 && (
                     <button
                       type="button"
                       onClick={() => handleRemoveStep(step.id)}
-                      className="neo-btn neo-btn-ghost p-2"
+                      className="neo-btn neo-btn-ghost p-2 min-h-[48px] min-w-[48px]"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -227,7 +227,7 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
             <button
               type="button"
               onClick={handleAddStep}
-              className="neo-btn neo-btn-ghost mt-2 text-sm"
+              className="neo-btn neo-btn-ghost mt-2 text-sm min-h-[44px]"
             >
               <Plus size={16} />
               Add Step
@@ -235,11 +235,11 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t-3 border-[var(--color-neo-border)]">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 border-t-3 border-[var(--color-neo-border)]">
             <button
               type="submit"
               disabled={!isValid || createFeature.isPending}
-              className={`neo-btn flex-1 ${isBug ? 'neo-btn-danger' : 'neo-btn-success'}`}
+              className={`neo-btn flex-1 min-h-[48px] justify-center ${isBug ? 'neo-btn-danger' : 'neo-btn-success'}`}
             >
               {createFeature.isPending ? (
                 <Loader2 size={18} className="animate-spin" />
@@ -253,7 +253,7 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
             <button
               type="button"
               onClick={onClose}
-              className="neo-btn neo-btn-ghost"
+              className="neo-btn neo-btn-ghost min-h-[48px] justify-center"
             >
               Cancel
             </button>

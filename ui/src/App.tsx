@@ -210,22 +210,22 @@ function App() {
     <div className="min-h-screen bg-[var(--color-neo-bg)]">
       {/* Header */}
       <header className="bg-[var(--color-neo-text)] text-white border-b-4 border-[var(--color-neo-border)]">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             {/* Logo and Title */}
-            <div className="flex items-center gap-4">
-              <h1 className="font-display text-2xl font-bold tracking-tight uppercase">
+            <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
+              <h1 className="font-display text-lg sm:text-2xl font-bold tracking-tight uppercase">
                 Auto Agent Harness
               </h1>
               {user && (
-                <span className="text-sm text-white/70">
+                <span className="text-xs sm:text-sm text-white/70">
                   {user.username}
                 </span>
               )}
             </div>
 
             {/* Controls */}
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <ProjectSelector
                 projects={projects ?? []}
                 selectedProject={selectedProject}
@@ -238,12 +238,13 @@ function App() {
                 <>
                   <button
                     onClick={() => setShowAddFeature(true)}
-                    className="neo-btn neo-btn-primary text-sm"
+                    className="neo-btn neo-btn-primary text-xs sm:text-sm min-h-[44px]"
                     title="Press N"
                   >
                     <Plus size={18} />
-                    Add Feature
-                    <kbd className="ml-1.5 px-1.5 py-0.5 text-xs bg-black/20 rounded font-mono">
+                    <span className="hidden sm:inline">Add Feature</span>
+                    <span className="sm:hidden">Add</span>
+                    <kbd className="hidden sm:inline ml-1.5 px-1.5 py-0.5 text-xs bg-black/20 rounded font-mono">
                       N
                     </kbd>
                   </button>
@@ -260,7 +261,7 @@ function App() {
               {/* Logout Button */}
               <button
                 onClick={logout}
-                className="neo-btn text-sm bg-white/10 hover:bg-white/20 text-white border-white/30"
+                className="neo-btn text-sm bg-white/10 hover:bg-white/20 text-white border-white/30 min-h-[44px] min-w-[44px]"
                 title="Logout"
               >
                 <LogOut size={18} />

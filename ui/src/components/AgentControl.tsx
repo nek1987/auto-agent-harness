@@ -96,7 +96,7 @@ export function AgentControl({ projectName, status, yoloMode = false, lastLogTim
             {/* YOLO Toggle - only shown when stopped */}
             <button
               onClick={() => setYoloEnabled(!yoloEnabled)}
-              className={`neo-btn text-sm py-2 px-3 ${
+              className={`neo-btn text-sm py-2 px-3 min-h-[44px] min-w-[44px] ${
                 yoloEnabled ? 'neo-btn-warning' : 'neo-btn-secondary'
               }`}
               title="YOLO Mode: Skip testing for rapid prototyping"
@@ -106,7 +106,7 @@ export function AgentControl({ projectName, status, yoloMode = false, lastLogTim
             <button
               onClick={handleStart}
               disabled={isLoading}
-              className="neo-btn neo-btn-success text-sm py-2 px-3"
+              className="neo-btn neo-btn-success text-sm py-2 px-3 min-h-[44px] min-w-[44px]"
               title={yoloEnabled ? "Start Agent (YOLO Mode)" : "Start Agent"}
             >
               {isLoading ? (
@@ -121,7 +121,7 @@ export function AgentControl({ projectName, status, yoloMode = false, lastLogTim
             <button
               onClick={handlePause}
               disabled={isLoading}
-              className="neo-btn neo-btn-warning text-sm py-2 px-3"
+              className="neo-btn neo-btn-warning text-sm py-2 px-3 min-h-[44px] min-w-[44px]"
               title="Pause Agent"
             >
               {isLoading ? (
@@ -133,7 +133,7 @@ export function AgentControl({ projectName, status, yoloMode = false, lastLogTim
             <button
               onClick={handleStop}
               disabled={isLoading}
-              className="neo-btn neo-btn-danger text-sm py-2 px-3"
+              className="neo-btn neo-btn-danger text-sm py-2 px-3 min-h-[44px] min-w-[44px]"
               title="Stop Agent"
             >
               <Square size={18} />
@@ -144,7 +144,7 @@ export function AgentControl({ projectName, status, yoloMode = false, lastLogTim
             <button
               onClick={handleResume}
               disabled={isLoading}
-              className="neo-btn neo-btn-success text-sm py-2 px-3"
+              className="neo-btn neo-btn-success text-sm py-2 px-3 min-h-[44px] min-w-[44px]"
               title="Resume Agent"
             >
               {isLoading ? (
@@ -156,7 +156,7 @@ export function AgentControl({ projectName, status, yoloMode = false, lastLogTim
             <button
               onClick={handleStop}
               disabled={isLoading}
-              className="neo-btn neo-btn-danger text-sm py-2 px-3"
+              className="neo-btn neo-btn-danger text-sm py-2 px-3 min-h-[44px] min-w-[44px]"
               title="Stop Agent"
             >
               <Square size={18} />

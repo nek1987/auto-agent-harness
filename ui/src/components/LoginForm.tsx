@@ -113,11 +113,6 @@ export function LoginForm() {
               )}
             </button>
           </form>
-
-          {/* Help Text */}
-          <p className="text-center text-sm text-[var(--color-neo-text-secondary)] mt-6">
-            Default credentials: admin / admin
-          </p>
         </div>
 
         {/* Footer */}

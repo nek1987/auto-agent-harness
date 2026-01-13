@@ -14,38 +14,38 @@ export function ProgressDashboard({
   isConnected,
 }: ProgressDashboardProps) {
   return (
-    <div className="neo-card p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-display text-xl font-bold uppercase">
+    <div className="neo-card p-4 sm:p-6">
+      <div className="flex items-center justify-between mb-3 sm:mb-4">
+        <h2 className="font-display text-lg sm:text-xl font-bold uppercase">
           Progress
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {isConnected ? (
             <>
-              <Wifi size={16} className="text-[var(--color-neo-done)]" />
-              <span className="text-sm text-[var(--color-neo-done)]">Live</span>
+              <Wifi size={14} className="sm:w-4 sm:h-4 text-[var(--color-neo-done)]" />
+              <span className="text-xs sm:text-sm text-[var(--color-neo-done)]">Live</span>
             </>
           ) : (
             <>
-              <WifiOff size={16} className="text-[var(--color-neo-danger)]" />
-              <span className="text-sm text-[var(--color-neo-danger)]">Offline</span>
+              <WifiOff size={14} className="sm:w-4 sm:h-4 text-[var(--color-neo-danger)]" />
+              <span className="text-xs sm:text-sm text-[var(--color-neo-danger)]">Offline</span>
             </>
           )}
         </div>
       </div>
 
       {/* Large Percentage */}
-      <div className="text-center mb-6">
-        <span className="font-display text-6xl font-bold">
+      <div className="text-center mb-4 sm:mb-6">
+        <span className="font-display text-4xl sm:text-5xl md:text-6xl font-bold">
           {percentage.toFixed(1)}
         </span>
-        <span className="font-display text-3xl font-bold text-[var(--color-neo-text-secondary)]">
+        <span className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-[var(--color-neo-text-secondary)]">
           %
         </span>
       </div>
 
       {/* Progress Bar */}
-      <div className="neo-progress mb-4">
+      <div className="neo-progress mb-3 sm:mb-4">
         <div
           className="neo-progress-fill"
           style={{ width: `${percentage}%` }}
@@ -53,21 +53,21 @@ export function ProgressDashboard({
       </div>
 
       {/* Stats */}
-      <div className="flex justify-center gap-8 text-center">
+      <div className="flex justify-center gap-4 sm:gap-6 md:gap-8 text-center">
         <div>
-          <span className="font-mono text-3xl font-bold text-[var(--color-neo-done)]">
+          <span className="font-mono text-xl sm:text-2xl md:text-3xl font-bold text-[var(--color-neo-done)]">
             {passing}
           </span>
-          <span className="block text-sm text-[var(--color-neo-text-secondary)] uppercase">
+          <span className="block text-xs sm:text-sm text-[var(--color-neo-text-secondary)] uppercase">
             Passing
           </span>
         </div>
-        <div className="text-4xl text-[var(--color-neo-text-secondary)]">/</div>
+        <div className="text-2xl sm:text-3xl md:text-4xl text-[var(--color-neo-text-secondary)]">/</div>
         <div>
-          <span className="font-mono text-3xl font-bold">
+          <span className="font-mono text-xl sm:text-2xl md:text-3xl font-bold">
             {total}
           </span>
-          <span className="block text-sm text-[var(--color-neo-text-secondary)] uppercase">
+          <span className="block text-xs sm:text-sm text-[var(--color-neo-text-secondary)] uppercase">
             Total
           </span>
         </div>

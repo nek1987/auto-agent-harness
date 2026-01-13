@@ -29,19 +29,19 @@ export function KanbanColumn({
     >
       {/* Header */}
       <div
-        className="px-4 py-3 border-b-3 border-[var(--color-neo-border)]"
+        className="px-3 sm:px-4 py-2.5 sm:py-3 border-b-3 border-[var(--color-neo-border)]"
         style={{ backgroundColor: colorMap[color] }}
       >
-        <h2 className="font-display text-lg font-bold uppercase flex items-center justify-between text-[var(--color-neo-text)]">
+        <h2 className="font-display text-base sm:text-lg font-bold uppercase flex items-center justify-between text-[var(--color-neo-text)]">
           {title}
           <span className="neo-badge bg-white text-[var(--color-neo-text)]">{count}</span>
         </h2>
       </div>
 
       {/* Cards */}
-      <div className="p-4 space-y-3 max-h-[600px] overflow-y-auto bg-[var(--color-neo-bg)]">
+      <div className="p-3 sm:p-4 space-y-2 sm:space-y-3 max-h-[50vh] sm:max-h-[500px] md:max-h-[600px] overflow-y-auto bg-[var(--color-neo-bg)]">
         {features.length === 0 ? (
-          <div className="text-center py-8 text-[var(--color-neo-text-secondary)]">
+          <div className="text-center py-6 sm:py-8 text-[var(--color-neo-text-secondary)]">
             No features
           </div>
         ) : (

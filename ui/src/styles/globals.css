@@ -430,3 +430,55 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #4a4a4a;
 }
+
+/* ============================================================================
+   Mobile Responsiveness Utilities
+   ============================================================================ */
+
+@layer components {
+  /* Mobile-optimized component adjustments */
+  @media (max-width: 639px) {
+    .neo-btn {
+      min-height: 44px;
+    }
+
+    .neo-input {
+      min-height: 48px;
+      font-size: 16px; /* Prevent iOS zoom on focus */
+    }
+
+    .neo-dropdown-item {
+      min-height: 48px;
+    }
+
+    .neo-card {
+      box-shadow: var(--shadow-neo-sm);
+    }
+
+    .neo-card:hover {
+      transform: none;
+      box-shadow: var(--shadow-neo-sm);
+    }
+  }
+
+  /* Disable hover effects on touch devices */
+  @media (hover: none) {
+    .neo-card:hover {
+      transform: none;
+      box-shadow: var(--shadow-neo-md);
+    }
+
+    .neo-btn:hover {
+      transform: none;
+      box-shadow: var(--shadow-neo-md);
+    }
+  }
+}
+
+/* Mobile scrollbar (thinner) */
+@media (max-width: 639px) {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+}

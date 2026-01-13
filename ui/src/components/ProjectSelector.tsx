@@ -50,23 +50,23 @@ export function ProjectSelector({
   const selectedProjectData = projects.find(p => p.name === selectedProject)
 
   return (
-    <div className="relative">
+    <div className="relative flex-1 sm:flex-initial">
       {/* Dropdown Trigger */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="neo-btn bg-white text-[var(--color-neo-text)] min-w-[200px] justify-between"
+        className="neo-btn bg-white text-[var(--color-neo-text)] w-full sm:w-auto sm:min-w-[200px] min-h-[44px] justify-between"
         disabled={isLoading}
       >
         {isLoading ? (
           <Loader2 size={18} className="animate-spin" />
         ) : selectedProject ? (
           <>
-            <span className="flex items-center gap-2">
-              <FolderOpen size={18} />
-              {selectedProject}
+            <span className="flex items-center gap-2 truncate max-w-[120px] sm:max-w-none">
+              <FolderOpen size={18} className="flex-shrink-0" />
+              <span className="truncate">{selectedProject}</span>
             </span>
             {selectedProjectData && selectedProjectData.stats.total > 0 && (
-              <span className="neo-badge bg-[var(--color-neo-done)] ml-2">
+              <span className="neo-badge bg-[var(--color-neo-done)] ml-2 flex-shrink-0">
                 {selectedProjectData.stats.percentage}%
               </span>
             )}
@@ -76,7 +76,7 @@ export function ProjectSelector({
             Select Project
           </span>
         )}
-        <ChevronDown size={18} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={18} className={`flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Dropdown Menu */}
@@ -89,7 +89,7 @@ export function ProjectSelector({
           />
 
           {/* Menu */}
-          <div className="absolute top-full left-0 mt-2 w-full neo-dropdown z-50 min-w-[280px]">
+          <div className="absolute top-full left-0 right-0 sm:right-auto mt-2 neo-dropdown z-50 w-full sm:w-auto sm:min-w-[280px] max-w-[calc(100vw-1rem)]">
             {projects.length > 0 ? (
               <div className="max-h-[300px] overflow-auto">
                 {projects.map(project => (
@@ -106,24 +106,24 @@ export function ProjectSelector({
                         onSelectProject(project.name)
                         setIsOpen(false)
                       }}
-                      className="flex-1 neo-dropdown-item flex items-center justify-between"
+                      className="flex-1 neo-dropdown-item flex items-center justify-between min-h-[48px]"
                     >
-                      <span className="flex items-center gap-2">
-                        <FolderOpen size={16} />
-                        {project.name}
+                      <span className="flex items-center gap-2 truncate">
+                        <FolderOpen size={16} className="flex-shrink-0" />
+                        <span className="truncate">{project.name}</span>
                       </span>
                       {project.stats.total > 0 && (
-                        <span className="text-sm font-mono">
+                        <span className="text-sm font-mono flex-shrink-0 ml-2">
                           {project.stats.passing}/{project.stats.total}
                         </span>
                       )}
                     </button>
                     <button
                       onClick={(e) => handleDeleteClick(e, project.name)}
-                      className="p-2 opacity-0 group-hover:opacity-100 hover:text-[var(--color-neo-danger)] transition-all"
+                      className="p-3 min-w-[44px] min-h-[44px] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:text-[var(--color-neo-danger)] transition-all flex items-center justify-center"
                       title="Delete project"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 ))}
@@ -143,7 +143,7 @@ export function ProjectSelector({
                 setShowNewProjectModal(true)
                 setIsOpen(false)
               }}
-              className="w-full neo-dropdown-item flex items-center gap-2 font-bold"
+              className="w-full neo-dropdown-item flex items-center gap-2 font-bold min-h-[48px]"
             >
               <Plus size={16} />
               New Project
@@ -155,7 +155,7 @@ export function ProjectSelector({
                 setShowImportProjectModal(true)
                 setIsOpen(false)
               }}
-              className="w-full neo-dropdown-item flex items-center gap-2"
+              className="w-full neo-dropdown-item flex items-center gap-2 min-h-[48px]"
             >
               <Download size={16} />
               Import Existing
