@@ -139,13 +139,60 @@ def get_initializer_prompt(project_dir: Path | None = None) -> str:
     return load_prompt("initializer_prompt", project_dir, mode="initializer")
 
 
-def get_coding_prompt(project_dir: Path | None = None) -> str:
-    """Load the coding agent prompt with skills context (project-specific if available)."""
+def get_coding_prompt(project_dir: Path | None = None, use_docker: bool | None = None) -> str:
+    """
+    Load the coding agent prompt with skills context (project-specific if available).
+
+    Args:
+        project_dir: Optional project directory for project-specific prompts
+        use_docker: Override Docker prompt selection. If None, auto-detect.
+
+    Returns:
+        The appropriate coding prompt (Docker or standard)
+    """
+    # Determine whether to use Docker prompt
+    if use_docker is None and project_dir:
+        use_docker = _should_use_docker_prompt(project_dir)
+
+    if use_docker:
+        # Try Docker prompt first, fall back to standard
+        try:
+            return load_prompt("coding_prompt_docker", project_dir, mode="coding")
+        except FileNotFoundError:
+            pass
+
     return load_prompt("coding_prompt", project_dir, mode="coding")
 
 
-def get_coding_prompt_yolo(project_dir: Path | None = None) -> str:
-    """Load the YOLO mode coding agent prompt with skills context (project-specific if available)."""
+def _should_use_docker_prompt(project_dir: Path) -> bool:
+    """
+    Determine if project should use Docker-based prompts.
+
+    Returns True if:
+    - Project has docker-compose.yml, OR
+    - Project uses Python/Go/Rust/Java (backend languages)
+    """
+    from lib.project_detector import should_use_docker_prompt
+
+    return should_use_docker_prompt(project_dir)
+
+
+def get_coding_prompt_yolo(project_dir: Path | None = None, use_docker: bool | None = None) -> str:
+    """
+    Load the YOLO mode coding agent prompt with skills context.
+
+    In YOLO mode, browser testing is skipped but Docker workflow is still used
+    for projects that benefit from container isolation.
+
+    Args:
+        project_dir: Optional project directory for project-specific prompts
+        use_docker: Override Docker prompt selection. If None, auto-detect.
+
+    Returns:
+        The YOLO mode coding prompt
+    """
+    # For YOLO mode, we still use standard YOLO prompt
+    # but it inherits Docker rules from project setup
     return load_prompt("coding_prompt_yolo", project_dir, mode="coding")
 
 

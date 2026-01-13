@@ -214,12 +214,78 @@ class AgentProcessManager:
                     self.status = "stopped"
                 self._remove_lock()
 
-    async def start(self, yolo_mode: bool = False) -> tuple[bool, str]:
+    def _has_docker_compose(self) -> bool:
+        """Check if project has docker-compose configuration."""
+        compose_files = [
+            "docker-compose.yml",
+            "docker-compose.yaml",
+            "compose.yml",
+            "compose.yaml",
+        ]
+        return any((self.project_dir / f).exists() for f in compose_files)
+
+    async def _start_docker_containers(self) -> tuple[bool, str]:
+        """
+        Start Docker containers if docker-compose.yml exists.
+
+        Returns:
+            Tuple of (success, message)
+        """
+        if not self._has_docker_compose():
+            return True, "No docker-compose.yml found, skipping container startup"
+
+        try:
+            logger.info(f"Starting Docker containers for {self.project_name}")
+
+            # Run docker compose up -d
+            result = subprocess.run(
+                ["docker", "compose", "up", "-d", "--build"],
+                cwd=str(self.project_dir),
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 minute timeout for build
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr or result.stdout
+                logger.warning(f"Docker compose failed: {error_msg}")
+                # Don't block agent start, just warn
+                return True, f"Warning: Docker compose failed: {error_msg[:200]}"
+
+            logger.info(f"Docker containers started for {self.project_name}")
+            return True, "Docker containers started"
+
+        except subprocess.TimeoutExpired:
+            return True, "Warning: Docker compose timed out, containers may not be ready"
+        except FileNotFoundError:
+            return True, "Warning: Docker not found, skipping container startup"
+        except Exception as e:
+            logger.warning(f"Error starting Docker containers: {e}")
+            return True, f"Warning: Could not start Docker containers: {e}"
+
+    async def _stop_docker_containers(self) -> None:
+        """Stop Docker containers if they were started."""
+        if not self._has_docker_compose():
+            return
+
+        try:
+            logger.info(f"Stopping Docker containers for {self.project_name}")
+            subprocess.run(
+                ["docker", "compose", "down"],
+                cwd=str(self.project_dir),
+                capture_output=True,
+                timeout=60,
+            )
+        except Exception as e:
+            logger.warning(f"Error stopping Docker containers: {e}")
+
+    async def start(self, yolo_mode: bool = False, auto_start_docker: bool = True) -> tuple[bool, str]:
         """
         Start the agent as a subprocess.
 
         Args:
             yolo_mode: If True, run in YOLO mode (no browser testing)
+            auto_start_docker: If True, start Docker containers before agent
 
         Returns:
             Tuple of (success, message)
@@ -229,6 +295,12 @@ class AgentProcessManager:
 
         if not self._check_lock():
             return False, "Another agent instance is already running for this project"
+
+        # Start Docker containers if configured
+        if auto_start_docker:
+            docker_success, docker_msg = await self._start_docker_containers()
+            if docker_msg:
+                logger.info(docker_msg)
 
         # Store YOLO mode for status queries
         self.yolo_mode = yolo_mode

@@ -10,6 +10,9 @@ Contains:
 - skills_loader: Loading and managing skills from .claude/skills/
 - error_classifier: Error classification and user-friendly messages
 - failure_tracker: Consecutive failure tracking with auto-pause
+- project_detector: Auto-detection of project type (Python, Node, Go, etc.)
+- project_scaffold: Docker scaffolding for projects
+- docker_validator: Validation of Docker configuration
 """
 
 from .dependency_resolver import DependencyResolver, DependencyCycleError
@@ -42,6 +45,26 @@ from .failure_tracker import (
     FailureStats,
     FAILURE_WINDOW_SECONDS,
     CONSECUTIVE_FAILURE_THRESHOLD,
+)
+from .project_detector import (
+    ProjectTypeInfo,
+    detect_project_type,
+    detect_language,
+    detect_framework,
+    get_project_type_string,
+    should_use_docker_prompt,
+)
+from .project_scaffold import (
+    scaffold_docker_project,
+    ensure_docker_config,
+    get_compose_services,
+)
+from .docker_validator import (
+    ValidationResult,
+    validate_docker_project,
+    find_compose_file,
+    find_dockerfiles,
+    cleanup_docker_resources,
 )
 
 __all__ = [
@@ -90,4 +113,21 @@ __all__ = [
     "FailureStats",
     "FAILURE_WINDOW_SECONDS",
     "CONSECUTIVE_FAILURE_THRESHOLD",
+    # Project detector
+    "ProjectTypeInfo",
+    "detect_project_type",
+    "detect_language",
+    "detect_framework",
+    "get_project_type_string",
+    "should_use_docker_prompt",
+    # Project scaffold
+    "scaffold_docker_project",
+    "ensure_docker_config",
+    "get_compose_services",
+    # Docker validator
+    "ValidationResult",
+    "validate_docker_project",
+    "find_compose_file",
+    "find_dockerfiles",
+    "cleanup_docker_resources",
 ]

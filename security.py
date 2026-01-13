@@ -10,7 +10,9 @@ import os
 import shlex
 
 # Allowed commands for development tasks
-# Minimal set needed for the autonomous coding demo
+# Extended set for Docker-driven development across all languages
+# NOTE: Runtime commands (python, go, etc.) MUST be used inside containers
+#       per the prompt rules - they are allowed here for docker exec context
 ALLOWED_COMMANDS = {
     # File inspection
     "ls",
@@ -27,15 +29,8 @@ ALLOWED_COMMANDS = {
     "pwd",
     # Output
     "echo",
-    # Node.js development
-    "npm",
-    "npx",
-    "pnpm",  # Project uses pnpm
-    "node",
     # Version control
     "git",
-    # Docker (for PostgreSQL)
-    "docker",
     # Process management
     "ps",
     "lsof",
@@ -53,6 +48,131 @@ ALLOWED_COMMANDS = {
     "bash",
     # Script execution
     "init.sh",  # Init scripts; validated separately
+
+    # ==========================================================================
+    # Docker (primary execution environment)
+    # ==========================================================================
+    "docker",
+    "docker-compose",
+
+    # ==========================================================================
+    # Node.js / JavaScript / TypeScript
+    # ==========================================================================
+    "npm",
+    "npx",
+    "pnpm",
+    "node",
+    "yarn",
+    "bun",
+    "tsc",
+    "tsx",
+    "vite",
+    "next",
+    "nuxt",
+    "nest",
+    "eslint",
+    "prettier",
+
+    # ==========================================================================
+    # Python (MUST be used inside containers per prompt rules)
+    # ==========================================================================
+    "python",
+    "python3",
+    "pip",
+    "pip3",
+    "uvicorn",
+    "gunicorn",
+    "pytest",
+    "poetry",
+    "pdm",
+    "pipenv",
+    "flask",
+    "django-admin",
+    "manage.py",
+    "alembic",
+    "celery",
+    "ruff",
+    "black",
+    "isort",
+    "mypy",
+
+    # ==========================================================================
+    # Go
+    # ==========================================================================
+    "go",
+    "gofmt",
+    "golint",
+    "gopls",
+
+    # ==========================================================================
+    # Rust
+    # ==========================================================================
+    "cargo",
+    "rustc",
+    "rustfmt",
+    "clippy",
+
+    # ==========================================================================
+    # Java / Kotlin / JVM
+    # ==========================================================================
+    "java",
+    "javac",
+    "gradle",
+    "gradlew",
+    "mvn",
+    "mvnw",
+    "kotlin",
+    "kotlinc",
+
+    # ==========================================================================
+    # Ruby
+    # ==========================================================================
+    "ruby",
+    "gem",
+    "bundle",
+    "bundler",
+    "rails",
+    "rake",
+    "rspec",
+
+    # ==========================================================================
+    # PHP
+    # ==========================================================================
+    "php",
+    "composer",
+    "artisan",
+    "phpunit",
+    "laravel",
+
+    # ==========================================================================
+    # Database CLIs (for debugging inside containers)
+    # ==========================================================================
+    "psql",
+    "pg_dump",
+    "pg_restore",
+    "mysql",
+    "mysqldump",
+    "mongosh",
+    "mongo",
+    "redis-cli",
+    "sqlite3",
+
+    # ==========================================================================
+    # Build & Package Tools
+    # ==========================================================================
+    "make",
+    "cmake",
+    "ninja",
+    "meson",
+
+    # ==========================================================================
+    # Testing & Quality
+    # ==========================================================================
+    "jest",
+    "vitest",
+    "mocha",
+    "cypress",
+    "playwright",
 }
 
 # Commands that need additional validation even when in the allowlist
@@ -183,12 +303,43 @@ def validate_pkill_command(command_string: str) -> tuple[bool, str]:
         Tuple of (is_allowed, reason_if_blocked)
     """
     # Allowed process names for pkill
+    # Extended to support all development runtimes
     allowed_process_names = {
+        # Node.js
         "node",
         "npm",
         "npx",
+        "pnpm",
+        "yarn",
+        "bun",
         "vite",
         "next",
+        "nuxt",
+        "nest",
+        # Python
+        "python",
+        "python3",
+        "uvicorn",
+        "gunicorn",
+        "celery",
+        "flask",
+        # Go
+        "go",
+        # Rust
+        "cargo",
+        # Java/JVM
+        "java",
+        "gradle",
+        "mvn",
+        # Ruby
+        "ruby",
+        "rails",
+        "puma",
+        # PHP
+        "php",
+        "artisan",
+        # Docker
+        "docker",
     }
 
     try:
