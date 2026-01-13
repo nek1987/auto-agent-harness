@@ -20,7 +20,7 @@ import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import HookMatcher
@@ -148,7 +148,11 @@ BUILTIN_TOOLS = [
 # Enhanced Hooks (SDK 0.1.19 / Claude Code v2.1.1)
 # ============================================================================
 
-async def post_tool_use_hook(tool_name: str, tool_input: dict, tool_result: str) -> None:
+async def post_tool_use_hook(
+    input_data: dict,
+    tool_use_id: str | None = None,
+    context: Any = None
+) -> dict:
     """
     PostToolUse hook for logging tool executions.
 
@@ -156,17 +160,21 @@ async def post_tool_use_hook(tool_name: str, tool_input: dict, tool_result: str)
     useful for debugging and monitoring agent behavior.
 
     Args:
-        tool_name: Name of the tool that was executed
-        tool_input: Input parameters passed to the tool
-        tool_result: Result returned by the tool
+        input_data: Dict containing tool_name, tool_input, tool_response
+        tool_use_id: Optional tool use ID for correlation
+        context: Optional HookContext
+
+    Returns:
+        Empty dict to allow the operation
     """
-    # Guard against None values to prevent 'NoneType' has no attribute 'items' errors
-    if tool_name is None:
-        tool_name = "unknown"
-    if tool_input is None:
-        tool_input = {}
-    if tool_result is None:
-        tool_result = ""
+    # Guard against None input to prevent errors
+    if input_data is None:
+        return {}
+
+    # Extract fields from input_data dict (SDK passes data this way)
+    tool_name = input_data.get('tool_name', 'unknown')
+    tool_input = input_data.get('tool_input', {})
+    tool_result = input_data.get('tool_response', '')
 
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -186,30 +194,11 @@ async def post_tool_use_hook(tool_name: str, tool_input: dict, tool_result: str)
         logger.debug(f"  Input: {input_str}")
         logger.debug(f"  Result: {result_preview}")
 
-
-async def session_start_hook(session_id: str, **kwargs) -> None:
-    """
-    SessionStart hook called when agent session begins.
-
-    Args:
-        session_id: Unique identifier for this session
-        **kwargs: Additional session metadata
-    """
-    timestamp = datetime.now(timezone.utc).isoformat()
-    logger.info(f"[{timestamp}] Agent session started: {session_id}")
+    return {}  # Always return dict, never None
 
 
-async def session_end_hook(session_id: str, reason: str = "completed", **kwargs) -> None:
-    """
-    SessionEnd hook called when agent session ends.
-
-    Args:
-        session_id: Unique identifier for this session
-        reason: Why the session ended (completed, error, max_turns, etc.)
-        **kwargs: Additional session metadata
-    """
-    timestamp = datetime.now(timezone.utc).isoformat()
-    logger.info(f"[{timestamp}] Agent session ended: {session_id} (reason: {reason})")
+## NOTE: SessionStart and SessionEnd hooks are NOT supported in Python SDK
+# They are TypeScript-only. See: https://platform.claude.com/docs/en/agent-sdk/hooks
 
 
 def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
@@ -330,13 +319,11 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
                 "PreToolUse": [
                     HookMatcher(matcher="Bash", hooks=[bash_security_hook]),
                 ],
-                # Audit: Log all tool executions (SDK 0.1.19)
+                # Audit: Log all tool executions
                 "PostToolUse": [
                     HookMatcher(matcher="*", hooks=[post_tool_use_hook]),
                 ],
-                # Lifecycle: Session start/end logging (SDK 0.1.19)
-                "SessionStart": [session_start_hook],
-                "SessionEnd": [session_end_hook],
+                # NOTE: SessionStart/SessionEnd are NOT supported in Python SDK (TypeScript-only)
             },
             max_turns=1000,
             cwd=str(project_dir.resolve()),
