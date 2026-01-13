@@ -11,10 +11,13 @@ Guide for deploying Auto-Agent-Harness on a server.
 3. [Mode 1: Native (OAuth Subscription)](#mode-1-native-oauth-subscription)
 4. [Mode 2: Docker + API Key](#mode-2-docker--api-key)
 5. [Mode 3: Docker + OAuth (Hybrid)](#mode-3-docker--oauth-hybrid)
-6. [Importing Existing Projects](#importing-existing-projects)
-7. [Configuration](#configuration)
-8. [Nginx Reverse Proxy](#nginx-reverse-proxy)
-9. [Troubleshooting](#troubleshooting)
+6. [Systemd Service (Production)](#systemd-service-production)
+7. [Updating the Application](#updating-the-application)
+8. [Logging](#logging)
+9. [Importing Existing Projects](#importing-existing-projects)
+10. [Configuration](#configuration)
+11. [Nginx Reverse Proxy](#nginx-reverse-proxy)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -267,6 +270,265 @@ rsync -avz .docker-credentials/ user@server:/opt/auto-agent-harness/auto-agent-h
 
 # On server: restart container
 ssh user@server "cd /opt/auto-agent-harness/auto-agent-harness && docker-compose restart"
+```
+
+---
+
+## Systemd Service (Production)
+
+For **Native Mode** production deployments, use systemd for:
+- Auto-start on boot
+- Auto-restart on crash
+- Background operation (survives SSH disconnect)
+- Structured logging to `/var/log/`
+
+### Quick Installation
+
+```bash
+cd /path/to/auto-agent-harness
+
+# Make installer executable
+chmod +x deploy/install_service.sh
+
+# Run installer (creates logs dir, installs service)
+./deploy/install_service.sh
+```
+
+### Manual Installation
+
+```bash
+# 1. Create log directory
+sudo mkdir -p /var/log/auto-agent
+sudo chown $USER:$USER /var/log/auto-agent
+
+# 2. Copy service file
+sudo cp deploy/auto-agent.service /etc/systemd/system/
+
+# 3. Edit paths in service file
+sudo nano /etc/systemd/system/auto-agent.service
+# Replace /path/to/auto-agent-harness with actual path
+# Replace <username> and <group> with your user
+
+# 4. Enable and start
+sudo systemctl daemon-reload
+sudo systemctl enable auto-agent
+sudo systemctl start auto-agent
+```
+
+### Service Commands
+
+```bash
+# Status
+sudo systemctl status auto-agent
+
+# Start/Stop/Restart
+sudo systemctl start auto-agent
+sudo systemctl stop auto-agent
+sudo systemctl restart auto-agent
+
+# Enable/Disable autostart
+sudo systemctl enable auto-agent
+sudo systemctl disable auto-agent
+
+# View logs
+sudo journalctl -u auto-agent -f
+```
+
+### Service Configuration
+
+The service file is at `/etc/systemd/system/auto-agent.service`:
+
+```ini
+[Service]
+Type=simple
+User=your-user
+WorkingDirectory=/path/to/auto-agent-harness
+Environment="HOST=0.0.0.0"
+Environment="PORT=8888"
+ExecStart=/path/to/auto-agent-harness/venv/bin/python -m uvicorn server.main:app --host 0.0.0.0 --port 8888
+Restart=always
+RestartSec=5
+```
+
+---
+
+## Updating the Application
+
+### Native Mode (with Systemd)
+
+```bash
+cd /path/to/auto-agent-harness
+
+# 1. Stop service
+sudo systemctl stop auto-agent
+
+# 2. Pull latest code
+git pull origin main
+
+# 3. Update Python dependencies
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 4. Rebuild frontend (if UI changed)
+cd ui
+npm install
+npm run build
+cd ..
+
+# 5. Restart service
+sudo systemctl start auto-agent
+
+# 6. Verify
+sudo systemctl status auto-agent
+tail -f /var/log/auto-agent/server.log
+```
+
+### Quick Update Script
+
+Create `update.sh` in project root:
+
+```bash
+#!/bin/bash
+set -e
+
+echo "Stopping service..."
+sudo systemctl stop auto-agent
+
+echo "Pulling latest code..."
+git pull origin main
+
+echo "Updating Python dependencies..."
+source venv/bin/activate
+pip install -r requirements.txt --quiet
+
+echo "Rebuilding frontend..."
+cd ui
+npm install --silent
+npm run build
+cd ..
+
+echo "Starting service..."
+sudo systemctl start auto-agent
+
+echo "Done! Checking status..."
+sudo systemctl status auto-agent --no-pager
+```
+
+Usage:
+```bash
+chmod +x update.sh
+./update.sh
+```
+
+### Docker Mode
+
+```bash
+cd /path/to/auto-agent-harness
+
+# 1. Pull latest code
+git pull origin main
+
+# 2. Rebuild and restart
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+# 3. Verify
+docker-compose logs -f
+```
+
+### Updating Without Downtime (Blue-Green)
+
+For zero-downtime updates, use a reverse proxy with health checks:
+
+```bash
+# Build new container with different name
+docker-compose -f docker-compose.yml -p auto-agent-new up -d --build
+
+# Wait for health check
+sleep 10
+curl http://localhost:8889/api/health
+
+# Switch traffic (update nginx upstream)
+# Then stop old container
+docker-compose -p auto-agent-old down
+```
+
+---
+
+## Logging
+
+### Log Locations
+
+| Mode | Location | Description |
+|------|----------|-------------|
+| **Systemd** | `/var/log/auto-agent/server.log` | Application logs |
+| **Systemd** | `/var/log/auto-agent/error.log` | Error logs |
+| **Systemd** | `journalctl -u auto-agent` | System journal |
+| **Docker** | `docker-compose logs` | Container logs |
+| **Native (manual)** | stdout | Console output |
+
+### Log Format
+
+```
+2025-01-13 12:34:56 [INFO] server.main: POST /api/projects/test/agent/start status=200 duration=0.123s client=192.168.1.10
+2025-01-13 12:34:57 [INFO] server.main: GET /api/projects/test/features status=200 duration=0.045s client=192.168.1.10
+2025-01-13 12:35:00 [ERROR] server.main: Agent crashed: Connection refused
+```
+
+### Viewing Logs
+
+```bash
+# Real-time (systemd)
+sudo journalctl -u auto-agent -f
+
+# Real-time (file)
+tail -f /var/log/auto-agent/server.log
+
+# Last 100 lines
+tail -100 /var/log/auto-agent/server.log
+
+# Errors only
+tail -f /var/log/auto-agent/error.log
+
+# Search logs
+grep "ERROR" /var/log/auto-agent/server.log
+grep "agent/start" /var/log/auto-agent/server.log
+```
+
+### Log Rotation
+
+Logs are automatically rotated by logrotate:
+- **Daily** rotation
+- **14 days** retention
+- **Compressed** old logs (gzip)
+
+Configuration at `/etc/logrotate.d/auto-agent`:
+
+```
+/var/log/auto-agent/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+}
+```
+
+### Increasing Log Verbosity
+
+For debugging, set log level in `.env`:
+
+```bash
+# Add to .env
+LOG_LEVEL=DEBUG
+```
+
+Or via environment variable:
+
+```bash
+LOG_LEVEL=DEBUG python -m uvicorn server.main:app
 ```
 
 ---
