@@ -7,8 +7,18 @@ import {
   Loader2,
   Plus,
   ExternalLink,
+  FileArchive,
+  FileCode,
+  CheckCircle2,
 } from 'lucide-react'
 import type { RedesignReference } from '../../lib/types'
+
+interface UploadedComponent {
+  filename: string
+  framework: string
+  file_type: string
+  size: number
+}
 
 interface ReferenceUploaderProps {
   projectName: string
@@ -26,7 +36,11 @@ export function ReferenceUploader({
   const [error, setError] = useState<string | null>(null)
   const [showUrlInput, setShowUrlInput] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [isDraggingZip, setIsDraggingZip] = useState(false)
+  const [uploadedComponents, setUploadedComponents] = useState<UploadedComponent[]>([])
+  const [isUploadingZip, setIsUploadingZip] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const zipInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileUpload = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -123,6 +137,68 @@ export function ReferenceUploader({
     handleFileUpload(e.dataTransfer.files)
   }, [handleFileUpload])
 
+  // ZIP file upload handlers
+  const handleZipUpload = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+
+    const file = files[0]
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      setError(`Invalid file type: ${file.name}. Must be a ZIP archive.`)
+      return
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      setError(`File too large: ${file.name}. Max size: 50MB`)
+      return
+    }
+
+    setIsUploadingZip(true)
+    setError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('source_type', 'custom')
+
+      const response = await fetch(
+        `/api/projects/${projectName}/component-reference/upload-zip`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        setUploadedComponents(data.components || [])
+        onReferenceAdded()
+      } else {
+        const err = await response.json()
+        setError(err.detail || 'ZIP upload failed')
+      }
+    } catch (err) {
+      setError('Failed to upload ZIP file')
+    } finally {
+      setIsUploadingZip(false)
+    }
+  }, [projectName, onReferenceAdded])
+
+  const handleZipDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDraggingZip(true)
+  }, [])
+
+  const handleZipDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDraggingZip(false)
+  }, [])
+
+  const handleZipDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDraggingZip(false)
+    handleZipUpload(e.dataTransfer.files)
+  }, [handleZipUpload])
+
   return (
     <div className="space-y-6">
       {/* Upload Area */}
@@ -172,6 +248,75 @@ export function ReferenceUploader({
           onChange={e => handleFileUpload(e.target.files)}
         />
       </div>
+
+      {/* ZIP Component Upload Area */}
+      <div
+        className={`
+          border-3 border-dashed p-6 text-center transition-colors
+          ${isDraggingZip
+            ? 'border-[var(--color-neo-success)] bg-[var(--color-neo-success)]/10'
+            : 'border-[var(--color-neo-border)] bg-[var(--color-neo-bg-alt)]'
+          }
+        `}
+        onDragOver={handleZipDragOver}
+        onDragLeave={handleZipDragLeave}
+        onDrop={handleZipDrop}
+      >
+        <FileArchive className="mx-auto mb-3 text-[var(--color-neo-muted)]" size={36} />
+        <h3 className="font-display font-bold mb-1 text-sm">
+          Component Reference (ZIP)
+        </h3>
+        <p className="text-xs text-[var(--color-neo-muted)] mb-3">
+          Upload ZIP with React/Vue/Svelte components (up to 50MB)
+        </p>
+        <button
+          onClick={() => zipInputRef.current?.click()}
+          disabled={isUploadingZip}
+          className="neo-btn neo-btn-ghost text-sm"
+        >
+          {isUploadingZip ? (
+            <Loader2 className="animate-spin" size={16} />
+          ) : (
+            <FileArchive size={16} />
+          )}
+          Upload ZIP
+        </button>
+        <input
+          ref={zipInputRef}
+          type="file"
+          accept=".zip"
+          className="hidden"
+          onChange={e => handleZipUpload(e.target.files)}
+        />
+      </div>
+
+      {/* Uploaded Components List */}
+      {uploadedComponents.length > 0 && (
+        <div className="p-4 bg-[var(--color-neo-bg-alt)] border-3 border-[var(--color-neo-border)]">
+          <div className="flex items-center gap-2 mb-3">
+            <CheckCircle2 className="text-[var(--color-neo-success)]" size={18} />
+            <h4 className="font-display font-bold text-sm">
+              Uploaded Components ({uploadedComponents.length})
+            </h4>
+          </div>
+          <div className="space-y-2">
+            {uploadedComponents.map((comp, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-3 p-2 bg-white border-2 border-[var(--color-neo-border)]"
+              >
+                <FileCode size={16} className="text-[var(--color-neo-accent)]" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{comp.filename}</p>
+                  <p className="text-xs text-[var(--color-neo-muted)]">
+                    {comp.framework} • {comp.file_type} • {Math.round(comp.size / 1024)}KB
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* URL Input */}
       {showUrlInput && (
