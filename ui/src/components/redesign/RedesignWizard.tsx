@@ -36,6 +36,7 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [uploadedComponentsCount, setUploadedComponentsCount] = useState(0)
 
   // Load existing session on mount
   useEffect(() => {
@@ -179,11 +180,18 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
     loadSession()
   }
 
+  const handleComponentsUploaded = (count: number) => {
+    setUploadedComponentsCount(prev => prev + count)
+  }
+
   const getStepIndex = (step: WizardStep) => STEPS.findIndex(s => s.key === step)
 
   const canProceed = () => {
     if (currentStep === 'references') {
-      return session?.references && session.references.length > 0
+      // Can proceed if we have image references OR uploaded components
+      const hasReferences = session?.references && session.references.length > 0
+      const hasComponents = uploadedComponentsCount > 0
+      return hasReferences || hasComponents
     }
     if (currentStep === 'tokens') {
       return session?.extracted_tokens !== null
@@ -314,6 +322,7 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
               projectName={projectName}
               references={session.references || []}
               onReferenceAdded={handleReferenceAdded}
+              onComponentsUploaded={handleComponentsUploaded}
             />
           )}
 

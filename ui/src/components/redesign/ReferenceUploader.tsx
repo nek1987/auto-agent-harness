@@ -24,12 +24,14 @@ interface ReferenceUploaderProps {
   projectName: string
   references: RedesignReference[]
   onReferenceAdded: () => void
+  onComponentsUploaded?: (count: number) => void
 }
 
 export function ReferenceUploader({
   projectName,
   references,
   onReferenceAdded,
+  onComponentsUploaded,
 }: ReferenceUploaderProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [urlInput, setUrlInput] = useState('')
@@ -39,6 +41,7 @@ export function ReferenceUploader({
   const [isDraggingZip, setIsDraggingZip] = useState(false)
   const [uploadedComponents, setUploadedComponents] = useState<UploadedComponent[]>([])
   const [isUploadingZip, setIsUploadingZip] = useState(false)
+  const [zipUploadSuccess, setZipUploadSuccess] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const zipInputRef = useRef<HTMLInputElement>(null)
 
@@ -170,8 +173,13 @@ export function ReferenceUploader({
 
       if (response.ok) {
         const data = await response.json()
-        setUploadedComponents(data.components || [])
+        const components = data.components || []
+        setUploadedComponents(components)
+        setZipUploadSuccess(true)
         onReferenceAdded()
+        if (onComponentsUploaded) {
+          onComponentsUploaded(components.length)
+        }
       } else {
         const err = await response.json()
         setError(err.detail || 'ZIP upload failed')
@@ -181,7 +189,7 @@ export function ReferenceUploader({
     } finally {
       setIsUploadingZip(false)
     }
-  }, [projectName, onReferenceAdded])
+  }, [projectName, onReferenceAdded, onComponentsUploaded])
 
   const handleZipDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -252,35 +260,70 @@ export function ReferenceUploader({
       {/* ZIP Component Upload Area */}
       <div
         className={`
-          border-3 border-dashed p-6 text-center transition-colors
-          ${isDraggingZip
-            ? 'border-[var(--color-neo-success)] bg-[var(--color-neo-success)]/10'
-            : 'border-[var(--color-neo-border)] bg-[var(--color-neo-bg-alt)]'
+          border-3 p-6 text-center transition-colors
+          ${zipUploadSuccess
+            ? 'border-[var(--color-neo-success)] bg-[var(--color-neo-success)]/10 border-solid'
+            : isDraggingZip
+              ? 'border-[var(--color-neo-success)] bg-[var(--color-neo-success)]/10 border-dashed'
+              : 'border-[var(--color-neo-border)] bg-[var(--color-neo-bg-alt)] border-dashed'
           }
         `}
         onDragOver={handleZipDragOver}
         onDragLeave={handleZipDragLeave}
         onDrop={handleZipDrop}
       >
-        <FileArchive className="mx-auto mb-3 text-[var(--color-neo-muted)]" size={36} />
-        <h3 className="font-display font-bold mb-1 text-sm">
-          Component Reference (ZIP)
-        </h3>
-        <p className="text-xs text-[var(--color-neo-muted)] mb-3">
-          Upload ZIP with React/Vue/Svelte components (up to 50MB)
-        </p>
-        <button
-          onClick={() => zipInputRef.current?.click()}
-          disabled={isUploadingZip}
-          className="neo-btn neo-btn-ghost text-sm"
-        >
-          {isUploadingZip ? (
-            <Loader2 className="animate-spin" size={16} />
-          ) : (
-            <FileArchive size={16} />
-          )}
-          Upload ZIP
-        </button>
+        {zipUploadSuccess ? (
+          <>
+            <CheckCircle2 className="mx-auto mb-3 text-[var(--color-neo-success)]" size={36} />
+            <h3 className="font-display font-bold mb-1 text-sm text-[var(--color-neo-success)]">
+              ZIP Uploaded Successfully!
+            </h3>
+            <p className="text-xs text-[var(--color-neo-muted)] mb-3">
+              {uploadedComponents.length} components extracted
+            </p>
+            <button
+              onClick={() => {
+                setZipUploadSuccess(false)
+                setUploadedComponents([])
+              }}
+              className="neo-btn neo-btn-ghost text-sm"
+            >
+              <FileArchive size={16} />
+              Upload Another
+            </button>
+          </>
+        ) : (
+          <>
+            {isUploadingZip ? (
+              <>
+                <Loader2 className="mx-auto mb-3 text-[var(--color-neo-accent)] animate-spin" size={36} />
+                <h3 className="font-display font-bold mb-1 text-sm">
+                  Uploading & Extracting...
+                </h3>
+                <p className="text-xs text-[var(--color-neo-muted)]">
+                  Processing ZIP file, please wait
+                </p>
+              </>
+            ) : (
+              <>
+                <FileArchive className="mx-auto mb-3 text-[var(--color-neo-muted)]" size={36} />
+                <h3 className="font-display font-bold mb-1 text-sm">
+                  Component Reference (ZIP)
+                </h3>
+                <p className="text-xs text-[var(--color-neo-muted)] mb-3">
+                  Upload ZIP with React/Vue/Svelte components (up to 50MB)
+                </p>
+                <button
+                  onClick={() => zipInputRef.current?.click()}
+                  className="neo-btn neo-btn-ghost text-sm"
+                >
+                  <FileArchive size={16} />
+                  Upload ZIP
+                </button>
+              </>
+            )}
+          </>
+        )}
         <input
           ref={zipInputRef}
           type="file"
