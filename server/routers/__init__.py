@@ -15,6 +15,7 @@ from .projects import router as projects_router
 from .spec_creation import router as spec_creation_router
 from .spec_import import router as spec_import_router
 from .skills_analysis import router as skills_analysis_router
+from .redesign import router as redesign_router
 
 __all__ = [
     "auth_router",
@@ -27,4 +28,5 @@ __all__ = [
     "assistant_chat_router",
     "feature_analyze_router",
     "skills_analysis_router",
+    "redesign_router",
 ]

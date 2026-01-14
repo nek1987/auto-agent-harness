@@ -8,9 +8,11 @@ SQLite database schema for feature storage using SQLAlchemy.
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, Integer, String, Text, create_engine
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, create_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, relationship, sessionmaker
 from sqlalchemy.types import JSON
 
 Base = declarative_base()
@@ -65,6 +67,127 @@ class Feature(Base):
             "bug_status": self.bug_status,
             "arch_layer": self.arch_layer,
             "assigned_skills": self.assigned_skills,
+        }
+
+
+class RedesignSession(Base):
+    """
+    Redesign session model for tracking frontend redesign operations.
+
+    A redesign session tracks the process of transforming a project's
+    design system based on reference images, URLs, or Figma files.
+    """
+
+    __tablename__ = "redesign_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_name = Column(String(100), nullable=False, index=True)
+
+    # Session status tracking
+    status = Column(
+        String(20),
+        default="collecting",
+        index=True,
+        comment="collecting, extracting, planning, approving, implementing, verifying, complete, failed"
+    )
+    current_phase = Column(
+        String(20),
+        nullable=True,
+        comment="references, tokens, plan, globals, config, components, pages, verification"
+    )
+
+    # Reference data - stored as JSON array of reference objects
+    # [{type: 'image'|'url'|'figma', data: base64/url, metadata: {...}}]
+    references = Column(JSON, nullable=True)
+
+    # Extracted design tokens - follows the design-tokens-v1 schema
+    extracted_tokens = Column(JSON, nullable=True)
+
+    # Change plan - files to modify and their changes
+    # {phases: [{name, description, files: [{path, action, changes}]}]}
+    change_plan = Column(JSON, nullable=True)
+
+    # Detected framework info
+    framework_detected = Column(
+        String(50),
+        nullable=True,
+        comment="react-tailwind, vue-css, shadcn, next-tailwind, etc."
+    )
+
+    # Error message if failed
+    error_message = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship to approvals
+    approvals = relationship("RedesignApproval", back_populates="session", cascade="all, delete-orphan")
+
+    def to_dict(self) -> dict:
+        """Convert session to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "project_name": self.project_name,
+            "status": self.status,
+            "current_phase": self.current_phase,
+            "references": self.references,
+            "extracted_tokens": self.extracted_tokens,
+            "change_plan": self.change_plan,
+            "framework_detected": self.framework_detected,
+            "error_message": self.error_message,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "approvals": [a.to_dict() for a in self.approvals] if self.approvals else [],
+        }
+
+
+class RedesignApproval(Base):
+    """
+    Redesign approval model for tracking user approvals at each phase.
+
+    Each phase of the redesign process requires user approval before
+    the agent can proceed with implementation.
+    """
+
+    __tablename__ = "redesign_approvals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("redesign_sessions.id"), nullable=False, index=True)
+
+    # Phase this approval is for
+    phase = Column(
+        String(20),
+        nullable=False,
+        comment="tokens, plan, globals, config, components, pages, verification"
+    )
+
+    # Approval status
+    approved = Column(Boolean, default=False)
+
+    # User modifications to the plan (if any)
+    # Allows user to adjust tokens or file changes before approval
+    modifications = Column(JSON, nullable=True)
+
+    # Optional user comment
+    comment = Column(Text, nullable=True)
+
+    # Timestamp
+    approved_at = Column(DateTime, nullable=True)
+
+    # Relationship back to session
+    session = relationship("RedesignSession", back_populates="approvals")
+
+    def to_dict(self) -> dict:
+        """Convert approval to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "session_id": self.session_id,
+            "phase": self.phase,
+            "approved": self.approved,
+            "modifications": self.modifications,
+            "comment": self.comment,
+            "approved_at": self.approved_at.isoformat() if self.approved_at else None,
         }
 
 

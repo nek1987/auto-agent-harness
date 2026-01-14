@@ -366,3 +366,143 @@ export interface ImportFeaturesResponse {
   pending: number
   message: string
 }
+
+// ============================================================================
+// Redesign Types
+// ============================================================================
+
+export type RedesignStatus =
+  | 'collecting'
+  | 'extracting'
+  | 'planning'
+  | 'approving'
+  | 'implementing'
+  | 'verifying'
+  | 'complete'
+  | 'failed'
+
+export type RedesignPhase =
+  | 'references'
+  | 'tokens'
+  | 'plan'
+  | 'globals'
+  | 'config'
+  | 'components'
+  | 'pages'
+  | 'verification'
+
+export interface RedesignReference {
+  type: 'image' | 'url' | 'figma'
+  data: string  // base64 for image, URL string otherwise
+  metadata?: {
+    filename?: string
+    original_url?: string
+    width?: number
+    height?: number
+    added_at?: string
+  }
+}
+
+export interface ColorScale {
+  [shade: string]: string
+}
+
+export interface ColorTokens {
+  primary?: ColorScale
+  secondary?: ColorScale
+  neutral?: ColorScale
+  semantic?: {
+    success?: { DEFAULT: string }
+    error?: { DEFAULT: string }
+    warning?: { DEFAULT: string }
+    info?: { DEFAULT: string }
+  }
+}
+
+export interface TypographyTokens {
+  fontFamily?: {
+    sans?: string[]
+    serif?: string[]
+    mono?: string[]
+  }
+  fontSize?: {
+    [size: string]: { value: string }
+  }
+  fontWeight?: {
+    [weight: string]: number
+  }
+}
+
+export interface SpacingTokens {
+  [key: string]: string
+}
+
+export interface BorderTokens {
+  radius?: {
+    [size: string]: string
+  }
+  width?: {
+    [size: string]: string
+  }
+}
+
+export interface ShadowTokens {
+  [size: string]: string
+}
+
+export interface DesignTokens {
+  $schema?: string
+  colors?: ColorTokens
+  typography?: TypographyTokens
+  spacing?: SpacingTokens
+  borders?: BorderTokens
+  shadows?: ShadowTokens
+}
+
+export interface FileChange {
+  type: string
+  name?: string
+  oldValue?: string
+  newValue: string | object
+  section?: string
+}
+
+export interface PlanFile {
+  path: string
+  action: 'create' | 'modify' | 'delete'
+  changes: FileChange[]
+}
+
+export interface PlanPhase {
+  name: string
+  description: string
+  files: PlanFile[]
+}
+
+export interface ChangePlan {
+  output_format: string
+  framework: string
+  phases: PlanPhase[]
+}
+
+export interface RedesignSession {
+  id: number
+  project_name: string
+  status: RedesignStatus
+  current_phase: RedesignPhase | null
+  references: RedesignReference[] | null
+  extracted_tokens: DesignTokens | null
+  change_plan: ChangePlan | null
+  framework_detected: string | null
+  error_message: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface RedesignApproval {
+  phase: string
+  approved: boolean
+  modifications: object | null
+  comment: string | null
+  approved_at: string | null
+}

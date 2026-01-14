@@ -127,6 +127,15 @@ SKILL_CATEGORIES: dict[str, list[str]] = {
         "senior-qa",
         "agile-product-owner",
     ],
+    # Redesign mode - for complete frontend design system transformation
+    # Uses design-system-extractor for token extraction from references,
+    # ui-design-system for design patterns, frontend-design for implementation
+    "redesign": [
+        "design-system-extractor",
+        "ui-design-system",
+        "frontend-design",
+        "senior-frontend",
+    ],
 }
 
 # Maximum number of skills to include in context to avoid token bloat

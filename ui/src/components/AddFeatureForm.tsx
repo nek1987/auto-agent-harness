@@ -1,9 +1,10 @@
 import { useState, useEffect, useId, useCallback } from 'react'
-import { X, Plus, Trash2, Loader2, AlertCircle, Bug, Sparkles, Brain, Zap, AlertTriangle } from 'lucide-react'
+import { X, Plus, Trash2, Loader2, AlertCircle, Bug, Sparkles, Brain, Zap, AlertTriangle, Palette } from 'lucide-react'
 import { useCreateFeature } from '../hooks/useProjects'
 import { useFeatureAnalysis } from '../hooks/useFeatureAnalysis'
 import { FeatureSuggestionsPanel, type Suggestion } from './FeatureSuggestionsPanel'
 import { SkillsAnalysisPanel } from './SkillsAnalysisPanel'
+import { RedesignWizard } from './redesign'
 import type { SubTask } from './TaskCard'
 
 interface ComplexityAnalysis {
@@ -26,7 +27,7 @@ interface AddFeatureFormProps {
 
 export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
   const formId = useId()
-  const [itemType, setItemType] = useState<'feature' | 'bug'>('feature')
+  const [itemType, setItemType] = useState<'feature' | 'bug' | 'redesign'>('feature')
   const [category, setCategory] = useState('')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -47,6 +48,12 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
   const createFeature = useCreateFeature(projectName)
   const analysis = useFeatureAnalysis(projectName)
   const isBug = itemType === 'bug'
+  const isRedesign = itemType === 'redesign'
+
+  // If redesign mode, show the wizard instead
+  if (isRedesign) {
+    return <RedesignWizard projectName={projectName} onClose={onClose} />
+  }
 
   // Auto-analyze complexity when description or steps change significantly
   const analyzeComplexity = useCallback(async () => {
@@ -307,13 +314,13 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
             </div>
           )}
 
-          {/* Type Toggle: Feature / Bug */}
+          {/* Type Toggle: Feature / Bug / Redesign */}
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => setItemType('feature')}
               className={`neo-btn flex-1 flex items-center justify-center gap-2 min-h-[48px] ${
-                !isBug ? 'neo-btn-primary' : 'neo-btn-ghost'
+                itemType === 'feature' ? 'neo-btn-primary' : 'neo-btn-ghost'
               }`}
             >
               <Sparkles size={18} />
@@ -327,7 +334,17 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
               }`}
             >
               <Bug size={18} />
-              <span className="text-sm sm:text-base">Bug Report</span>
+              <span className="text-sm sm:text-base">Bug</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setItemType('redesign')}
+              className={`neo-btn flex-1 flex items-center justify-center gap-2 min-h-[48px] ${
+                isRedesign ? 'neo-btn-accent' : 'neo-btn-ghost'
+              }`}
+            >
+              <Palette size={18} />
+              <span className="text-sm sm:text-base">Redesign</span>
             </button>
           </div>
 

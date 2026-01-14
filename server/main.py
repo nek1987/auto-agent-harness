@@ -57,6 +57,7 @@ from .routers import (
     features_router,
     filesystem_router,
     projects_router,
+    redesign_router,
     spec_creation_router,
     spec_import_router,
     skills_analysis_router,
@@ -231,6 +232,7 @@ app.include_router(filesystem_router)
 app.include_router(assistant_chat_router)
 app.include_router(feature_analyze_router)
 app.include_router(skills_analysis_router)
+app.include_router(redesign_router)
 
 
 # ============================================================================
