@@ -94,6 +94,7 @@ def feature_to_response(f) -> FeatureResponse:
         item_type=getattr(f, 'item_type', 'feature') or 'feature',
         parent_bug_id=getattr(f, 'parent_bug_id', None),
         bug_status=getattr(f, 'bug_status', None),
+        assigned_skills=getattr(f, 'assigned_skills', None),
     )
 
 
@@ -188,6 +189,7 @@ async def create_feature(project_name: str, feature: FeatureCreate):
                 passes=False,
                 item_type=feature.item_type,
                 bug_status="open" if is_bug else None,
+                assigned_skills=feature.assigned_skills if not is_bug else None,
             )
 
             session.add(db_feature)

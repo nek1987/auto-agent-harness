@@ -122,11 +122,41 @@ if [ -n "$SERVICE_EXISTS" ]; then
         exit 1
     fi
 else
-    echo -e "${YELLOW}Service not installed. Run ./deploy/install_service.sh to install.${NC}"
-    echo "Starting manually..."
+    echo -e "${YELLOW}Service not installed. Starting manually...${NC}"
+
+    # Check if .env file exists
+    if [ ! -f ".env" ]; then
+        echo -e "${RED}ERROR: .env file not found!${NC}"
+        echo ""
+        echo "Please create .env file first:"
+        echo "  cp .env.native.example .env    # For local development"
+        echo "  cp .env.docker.example .env    # For Docker deployment"
+        echo ""
+        echo "Then edit .env with your settings and run this script again."
+        exit 1
+    fi
+
+    # Load environment variables from .env
+    echo "Loading environment from .env..."
+    set -a
+    source .env
+    set +a
+
+    # Use variables from .env with defaults
+    HOST="${HOST:-127.0.0.1}"
+    PORT="${PORT:-8888}"
+
+    echo "Starting server on $HOST:$PORT..."
     source venv/bin/activate
-    nohup python -m uvicorn server.main:app --host 0.0.0.0 --port 8888 > /tmp/auto-agent.log 2>&1 &
-    echo "Started in background. Logs: /tmp/auto-agent.log"
+    nohup python -m uvicorn server.main:app --host "$HOST" --port "$PORT" > /tmp/auto-agent.log 2>&1 &
+
+    sleep 2
+    if curl -s "http://$HOST:$PORT/api/health" > /dev/null 2>&1; then
+        echo -e "${GREEN}Server started successfully on $HOST:$PORT${NC}"
+    else
+        echo -e "${YELLOW}Server may still be starting. Check logs:${NC}"
+        echo "  tail -f /tmp/auto-agent.log"
+    fi
 fi
 
 # Summary
@@ -146,5 +176,13 @@ if [ -n "$SERVICE_EXISTS" ]; then
 fi
 
 echo ""
-echo "Server URL: http://$(hostname -I | awk '{print $1}'):8888"
+if [ -n "$HOST" ] && [ -n "$PORT" ]; then
+    if [ "$HOST" = "127.0.0.1" ] || [ "$HOST" = "localhost" ]; then
+        echo "Server URL: http://localhost:$PORT"
+    else
+        echo "Server URL: http://$(hostname -I | awk '{print $1}'):$PORT"
+    fi
+else
+    echo "Server URL: http://$(hostname -I | awk '{print $1}'):8888"
+fi
 echo ""

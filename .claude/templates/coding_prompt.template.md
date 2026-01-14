@@ -110,6 +110,17 @@ Once you've retrieved the feature, **immediately mark it as in-progress**:
 Use the feature_mark_in_progress tool with feature_id=42
 ```
 
+#### Load Expert Skills (If Available)
+
+If the feature has `assigned_skills` in its data, load the skills context to guide your implementation:
+
+```
+# Load skills context for better implementation quality
+Use the feature_get_skills_context tool with feature_id=42
+```
+
+The skills context contains best practices, patterns, and guidelines from expert skills that were assigned to this feature during planning. Apply these practices while implementing the feature.
+
 Focus on completing one feature perfectly and completing its testing steps in this session before moving on to other features.
 It's ok if you only complete one feature in this session, as there will be more sessions later that continue to make progress.
 
@@ -300,6 +311,23 @@ Update `claude-progress.txt` with:
 - What should be worked on next
 - Current completion status (e.g., "45/200 tests passing")
 
+### STEP 9.5: CHECK PROJECT COMPLETION
+
+After marking a feature as passing, check if the project is complete:
+
+```
+# Check if all features are done and generate completion report
+Use the project_completion_check tool
+```
+
+If the response shows `"completed": true`:
+- A `COMPLETION_REPORT.md` has been generated in the project directory
+- The report contains full project summary, feature list, and statistics
+- A webhook notification has been sent (if configured)
+- Celebrate! You've completed the project!
+
+If `"completed": false`, continue to the next feature.
+
 ### STEP 10: END SESSION CLEANLY
 
 Before context fills up:
@@ -309,6 +337,7 @@ Before context fills up:
 3. Mark features as passing if tests verified
 4. Ensure no uncommitted changes
 5. Leave app in working state (no broken features)
+6. If project completed, mention this in claude-progress.txt
 
 ---
 
@@ -387,6 +416,15 @@ feature_skip with feature_id={id}
 
 # 7. Clear in-progress status (when abandoning a feature)
 feature_clear_in_progress with feature_id={id}
+
+# 8. Check project completion and generate report (call after last feature)
+project_completion_check
+
+# 9. Export features to markdown (for documentation)
+feature_export_markdown
+
+# 10. Get skills context for a feature (if assigned_skills present)
+feature_get_skills_context with feature_id={id}
 ```
 
 ### RULES:

@@ -44,6 +44,9 @@ class Feature(Base):
     # 5=frontend_core, 6=frontend_features, 7=integration, 8=quality
     arch_layer = Column(Integer, nullable=False, default=8, index=True)
 
+    # Skills Analysis: assigned skills for coding agent to use during implementation
+    assigned_skills = Column(JSON, nullable=True)  # List of skill names, e.g., ["senior-backend", "api-designer"]
+
     def to_dict(self) -> dict:
         """Convert feature to dictionary for JSON serialization."""
         return {
@@ -61,6 +64,7 @@ class Feature(Base):
             "parent_bug_id": self.parent_bug_id,
             "bug_status": self.bug_status,
             "arch_layer": self.arch_layer,
+            "assigned_skills": self.assigned_skills,
         }
 
 
@@ -123,6 +127,11 @@ def _migrate_database(engine) -> None:
             conn.commit()
             # Create index for better query performance
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_arch_layer ON features(arch_layer)"))
+            conn.commit()
+
+        # Migration 8: Add assigned_skills column for skills-based feature analysis
+        if "assigned_skills" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN assigned_skills JSON"))
             conn.commit()
 
 

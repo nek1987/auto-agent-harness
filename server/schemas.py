@@ -77,6 +77,7 @@ class FeatureCreate(FeatureBase):
     """Request schema for creating a new feature."""
     priority: int | None = None
     item_type: Literal["feature", "bug"] = "feature"
+    assigned_skills: list[str] | None = None  # Skills from skills analysis
 
 
 class BugCreate(BaseModel):
@@ -95,6 +96,7 @@ class FeatureResponse(FeatureBase):
     item_type: str = "feature"
     parent_bug_id: int | None = None
     bug_status: str | None = None
+    assigned_skills: list[str] | None = None
 
     class Config:
         from_attributes = True

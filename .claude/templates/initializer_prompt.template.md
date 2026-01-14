@@ -60,6 +60,22 @@ Use the feature_create_bulk tool with features=[
 - All features start with `passes: false` by default
 - You can create features in batches if there are many (e.g., 50 at a time)
 
+### AUTOMATIC FEATURE SPLITTING
+
+The system **automatically splits complex features** (10+ steps) into smaller sub-features.
+
+**How it works:**
+- Features with 10 or more steps are analyzed automatically
+- Steps are grouped by logical operations (Navigation, Form Input, Verification, etc.)
+- Each group becomes a separate sub-feature
+- Original feature name is preserved with a suffix (e.g., "Login - Form Input")
+
+**You should:**
+- Create features naturally without worrying too much about step count
+- Trust the system to split complex features appropriately
+- The final feature count may exceed your initial count - this is expected and good
+- Focus on covering all functionality from the spec
+
 **Requirements for features:**
 
 - Feature count must match the `feature_count` specified in app_spec.txt

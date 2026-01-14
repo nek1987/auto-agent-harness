@@ -34,6 +34,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from api.database import Feature, create_database
 from api.migration import migrate_json_to_sqlite
 from lib.architecture_layers import get_layer_for_category, ArchLayer, get_layer_name
+from lib.feature_splitter import FeatureSplitter, split_features
+from lib.completion_reporter import CompletionReporter, check_project_completion
 
 # Configuration from environment
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", ".")).resolve()
@@ -463,13 +465,18 @@ def feature_clear_in_progress(
 
 @mcp.tool()
 def feature_create_bulk(
-    features: Annotated[list[dict], Field(description="List of features to create, each with category, name, description, and steps")]
+    features: Annotated[list[dict], Field(description="List of features to create, each with category, name, description, and steps")],
+    auto_split: Annotated[bool, Field(description="Auto-split complex features with 10+ steps into sub-features")] = True
 ) -> str:
     """Create multiple features in a single operation.
 
     Features are assigned sequential priorities based on their order.
     All features start with passes=false.
     Architectural layer (arch_layer) is auto-assigned based on category.
+
+    AUTOMATIC SPLITTING: By default, features with 10+ steps are automatically
+    split into smaller sub-features for better manageability. Set auto_split=false
+    to disable this behavior.
 
     This is typically used by:
     - Initializer agent to set up features from app specification
@@ -494,12 +501,24 @@ def feature_create_bulk(
             - steps (list[str]): Implementation/test steps
             - parent_bug_id (int, optional): Bug ID if this is a fix feature
             - arch_layer (int, optional): Override auto-assigned layer (0-8)
+        auto_split: If True (default), features with 10+ steps are auto-split
 
     Returns:
-        JSON with: created (int), bug_fixes (int), layers_summary - number of features created
+        JSON with: created (int), bug_fixes (int), layers_summary, split_info
     """
     session = get_session()
     try:
+        # Auto-split complex features if enabled
+        split_info = None
+        if auto_split:
+            result = split_features(features, auto_split=True)
+            if result.split_count > 0:
+                split_info = {
+                    "original_count": result.original_count,
+                    "after_split": result.final_count,
+                    "features_split": result.split_count,
+                }
+            features = result.features
         # Get the starting priority
         max_priority_result = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
         start_priority = (max_priority_result[0] + 1) if max_priority_result else 1
@@ -562,6 +581,8 @@ def feature_create_bulk(
             "created": created_count,
             "layers_summary": layers_summary,
         }
+        if split_info:
+            result["split_info"] = split_info
         if bug_fix_count > 0:
             result["bug_fixes"] = bug_fix_count
             result["parent_bugs"] = list(parent_bug_ids)
@@ -816,6 +837,173 @@ def bug_get_status(
             "fixes_total": len(fixes),
             "fixes_passing": passing_count,
             "can_resolve": len(fixes) > 0 and passing_count == len(fixes)
+        }, indent=2)
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def project_completion_check() -> str:
+    """Check if all features are complete and generate completion report.
+
+    This tool checks if 100% of features are passing. If so, it:
+    1. Generates COMPLETION_REPORT.md with full project summary
+    2. Collects statistics (features, categories, layers, git commits, LOC)
+    3. Sends completion webhook if configured (PROGRESS_N8N_WEBHOOK_URL)
+
+    Call this after marking the final feature as passing to trigger
+    the completion workflow and generate documentation.
+
+    Returns:
+        JSON with:
+        - completed (bool): True if all features pass
+        - remaining (int): Number of features still pending
+        - report_path (str): Path to generated report (if completed)
+        - stats (dict): Completion statistics (if completed)
+    """
+    result = check_project_completion(PROJECT_DIR)
+
+    response = {
+        "completed": result.is_complete,
+        "remaining": result.remaining,
+    }
+
+    if result.is_complete and result.stats:
+        response["report_path"] = str(result.report_path) if result.report_path else None
+        response["stats"] = {
+            "total_features": result.stats.total_features,
+            "completion_date": result.stats.completion_date.isoformat(),
+            "git_commits": result.stats.git_commits,
+            "lines_of_code": result.stats.lines_of_code,
+            "categories": result.stats.categories,
+            "layers": result.stats.layers,
+        }
+        response["message"] = (
+            f"Project completed! {result.stats.total_features} features implemented. "
+            f"Report generated at {result.report_path}"
+        )
+
+        # Send webhook notification
+        reporter = CompletionReporter(PROJECT_DIR)
+        webhook_sent = reporter.send_completion_webhook(result.stats)
+        response["webhook_sent"] = webhook_sent
+    else:
+        response["message"] = f"{result.remaining} features remaining. Keep implementing!"
+
+    return json.dumps(response, indent=2)
+
+
+@mcp.tool()
+def feature_export_markdown() -> str:
+    """Export all features to markdown format for documentation.
+
+    Generates a markdown document listing all features grouped by category,
+    showing their status (passing/pending), description, and steps.
+
+    Use this for:
+    - Creating documentation
+    - Reviewing project scope
+    - Sharing feature list with stakeholders
+
+    Returns:
+        Markdown-formatted string with all features
+    """
+    reporter = CompletionReporter(PROJECT_DIR)
+    markdown = reporter.export_features_to_markdown()
+    return markdown
+
+
+@mcp.tool()
+def feature_get_skills_context(
+    feature_id: Annotated[int, Field(description="The ID of the feature to get skills for", ge=1)]
+) -> str:
+    """Get expert skills context for a feature based on its assigned_skills.
+
+    When a feature has assigned_skills from the Skills Analysis system,
+    this tool loads the skill content from the .claude/skills/ directory
+    and returns it as context for implementation.
+
+    Use this after feature_get_next if the feature has assigned_skills.
+    The returned context contains best practices and guidelines from the
+    assigned skills to guide your implementation.
+
+    Args:
+        feature_id: The ID of the feature to get skills for
+
+    Returns:
+        JSON with:
+        - has_skills (bool): True if feature has assigned skills
+        - skills_context (str): Combined skills content for implementation
+        - skill_names (list[str]): Names of the assigned skills
+    """
+    session = get_session()
+    try:
+        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+
+        if feature is None:
+            return json.dumps({"error": f"Feature with ID {feature_id} not found"})
+
+        assigned_skills = getattr(feature, 'assigned_skills', None)
+
+        if not assigned_skills or len(assigned_skills) == 0:
+            return json.dumps({
+                "has_skills": False,
+                "skills_context": "",
+                "skill_names": [],
+                "message": "No skills assigned to this feature"
+            })
+
+        # Get the harness directory (where skills are stored)
+        harness_dir = Path(__file__).parent.parent
+        skills_dir = harness_dir / ".claude" / "skills"
+
+        if not skills_dir.exists():
+            return json.dumps({
+                "error": f"Skills directory not found: {skills_dir}",
+                "has_skills": False
+            })
+
+        # Load skills content
+        skills_parts = []
+        loaded_skills = []
+
+        for skill_name in assigned_skills:
+            skill_md_path = skills_dir / skill_name / "SKILL.md"
+
+            if skill_md_path.exists():
+                try:
+                    content = skill_md_path.read_text(encoding="utf-8")
+                    # Truncate very long skill content
+                    if len(content) > 4000:
+                        content = content[:4000] + "\n\n[... truncated for brevity ...]"
+
+                    skills_parts.append(f"### {skill_name}\n\n{content}")
+                    loaded_skills.append(skill_name)
+                except (OSError, PermissionError) as e:
+                    print(f"Warning: Could not load skill {skill_name}: {e}")
+                    continue
+
+        if not skills_parts:
+            return json.dumps({
+                "has_skills": True,
+                "skills_context": "",
+                "skill_names": assigned_skills,
+                "loaded_skills": [],
+                "message": "Skills assigned but content could not be loaded"
+            })
+
+        skills_context = (
+            "## Expert Skills for This Feature\n\n"
+            "Apply these best practices and patterns:\n\n"
+            + "\n\n---\n\n".join(skills_parts)
+        )
+
+        return json.dumps({
+            "has_skills": True,
+            "skills_context": skills_context,
+            "skill_names": assigned_skills,
+            "loaded_skills": loaded_skills,
+            "message": f"Loaded {len(loaded_skills)} skill(s) for implementation guidance"
         }, indent=2)
     finally:
         session.close()

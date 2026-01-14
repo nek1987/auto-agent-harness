@@ -16,6 +16,8 @@ Contains:
 - project_scaffold: Docker scaffolding for projects
 - docker_validator: Validation of Docker configuration
 - browser_check: Playwright browser installation check
+- feature_splitter: Auto-splitting complex features into sub-features
+- completion_reporter: Project completion detection and reporting
 """
 
 from .architecture_layers import (
@@ -94,6 +96,17 @@ from .browser_check import (
     check_playwright_browser,
     install_playwright_browser,
     ensure_browser_available,
+)
+from .feature_splitter import (
+    FeatureSplitter,
+    SplitResult,
+    split_features,
+)
+from .completion_reporter import (
+    CompletionReporter,
+    CompletionStats,
+    CompletionResult,
+    check_project_completion,
 )
 
 __all__ = [
@@ -182,4 +195,13 @@ __all__ = [
     "check_playwright_browser",
     "install_playwright_browser",
     "ensure_browser_available",
+    # Feature splitter
+    "FeatureSplitter",
+    "SplitResult",
+    "split_features",
+    # Completion reporter
+    "CompletionReporter",
+    "CompletionStats",
+    "CompletionResult",
+    "check_project_completion",
 ]

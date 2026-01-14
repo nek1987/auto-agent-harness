@@ -117,6 +117,16 @@ SKILL_CATEGORIES: dict[str, list[str]] = {
         "cto-advisor",
         "code-reviewer",
     ],
+    # Feature analysis mode - for analyzing individual features
+    # Uses product skills for prioritization, UX for user impact,
+    # architect for technical assessment, QA for test coverage
+    "feature_analysis": [
+        "product-manager-toolkit",
+        "ux-researcher-designer",
+        "senior-architect",
+        "senior-qa",
+        "agile-product-owner",
+    ],
 }
 
 # Maximum number of skills to include in context to avoid token bloat

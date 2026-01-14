@@ -53,15 +53,18 @@ from .routers import (
     agent_router,
     assistant_chat_router,
     auth_router,
+    feature_analyze_router,
     features_router,
     filesystem_router,
     projects_router,
     spec_creation_router,
     spec_import_router,
+    skills_analysis_router,
 )
 from .routers.auth import get_current_user
 from .schemas import SetupStatus
 from .services.assistant_chat_session import cleanup_all_sessions as cleanup_assistant_sessions
+from .services.feature_analyzer import cleanup_analyzer_sessions
 from .services.process_manager import cleanup_all_managers
 from .websocket import project_websocket
 from .lib.path_security import config as path_config
@@ -111,10 +114,11 @@ async def lifespan(app: FastAPI):
     logger.info(f"CORS origins: {CORS_ORIGINS}")
     logger.info("=" * 50)
     yield
-    # Shutdown - cleanup all running agents and assistant sessions
+    # Shutdown - cleanup all running agents and sessions
     logger.info("Server shutting down...")
     await cleanup_all_managers()
     await cleanup_assistant_sessions()
+    await cleanup_analyzer_sessions()
     logger.info("Server stopped")
 
 
@@ -225,6 +229,8 @@ app.include_router(spec_creation_router)
 app.include_router(spec_import_router)
 app.include_router(filesystem_router)
 app.include_router(assistant_chat_router)
+app.include_router(feature_analyze_router)
+app.include_router(skills_analysis_router)
 
 
 # ============================================================================

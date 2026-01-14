@@ -11,11 +11,14 @@
   --color-neo-pending: #ffd60a;
   --color-neo-progress: #00b4d8;
   --color-neo-done: #70e000;
+  --color-neo-success: #70e000;
+  --color-neo-warning: #ffd60a;
   --color-neo-accent: #ff006e;
   --color-neo-danger: #ff5400;
   --color-neo-border: #1a1a1a;
   --color-neo-text: #1a1a1a;
   --color-neo-text-secondary: #4a4a4a;
+  --color-neo-muted: #6b7280;
 
   /* Fonts */
   --font-neo-display: 'Space Grotesk', sans-serif;
@@ -45,11 +48,14 @@
     --color-neo-pending: #ffd60a;
     --color-neo-progress: #00b4d8;
     --color-neo-done: #70e000;
+    --color-neo-success: #70e000;
+    --color-neo-warning: #ffd60a;
     --color-neo-accent: #ff006e;
     --color-neo-danger: #ff5400;
     --color-neo-border: #1a1a1a;
     --color-neo-text: #1a1a1a;
     --color-neo-text-secondary: #4a4a4a;
+    --color-neo-muted: #6b7280;
     --font-neo-display: 'Space Grotesk', sans-serif;
     --font-neo-sans: 'DM Sans', sans-serif;
     --font-neo-mono: 'JetBrains Mono', monospace;
@@ -147,6 +153,11 @@
 
   .neo-btn-danger {
     background-color: #ff5400;
+    color: #ffffff;
+  }
+
+  .neo-btn-accent {
+    background-color: #ff006e;
     color: #ffffff;
   }
 

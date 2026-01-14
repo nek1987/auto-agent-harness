@@ -134,6 +134,100 @@ def inject_skills_context(content: str, mode: str) -> str:
     return content + f"\n\n## Available Expert Skills\n\n{skills_context}"
 
 
+def get_skills_context_for_feature(
+    assigned_skills: list[str] | None,
+    skills_dir: Path | None = None,
+) -> str:
+    """
+    Load skills context for a feature based on its assigned_skills.
+
+    This function loads the SKILL.md content from each assigned skill
+    and returns a combined context string that can be injected into
+    the coding prompt to guide the agent's implementation.
+
+    Args:
+        assigned_skills: List of skill names assigned to the feature
+        skills_dir: Optional path to skills directory. Defaults to harness skills.
+
+    Returns:
+        Combined skills context string, or empty string if no skills assigned
+    """
+    if not assigned_skills or len(assigned_skills) == 0:
+        return ""
+
+    if skills_dir is None:
+        skills_dir = HARNESS_DIR / ".claude" / "skills"
+
+    if not skills_dir.exists():
+        return ""
+
+    skills_context_parts = []
+
+    for skill_name in assigned_skills:
+        skill_path = skills_dir / skill_name
+        skill_md_path = skill_path / "SKILL.md"
+
+        if skill_md_path.exists():
+            try:
+                content = skill_md_path.read_text(encoding="utf-8")
+                # Limit content to avoid overly long prompts
+                # Take first 4000 characters which should capture key info
+                if len(content) > 4000:
+                    content = content[:4000] + "\n\n[... content truncated for brevity ...]"
+
+                skills_context_parts.append(
+                    f"### Skill: {skill_name}\n\n{content}"
+                )
+            except (OSError, PermissionError) as e:
+                print(f"Warning: Could not read skill {skill_name}: {e}")
+                continue
+
+    if not skills_context_parts:
+        return ""
+
+    return (
+        "## Assigned Expert Skills\n\n"
+        "Apply the best practices, patterns, and guidelines from these skills:\n\n"
+        + "\n\n---\n\n".join(skills_context_parts)
+    )
+
+
+def inject_feature_skills(content: str, assigned_skills: list[str] | None) -> str:
+    """
+    Inject feature-specific skills context into a prompt.
+
+    This is used when the coding agent is working on a feature that has
+    assigned skills from the Skills Analysis system.
+
+    Args:
+        content: The prompt content
+        assigned_skills: List of skill names assigned to the feature
+
+    Returns:
+        Prompt with feature skills context injected
+    """
+    skills_context = get_skills_context_for_feature(assigned_skills)
+
+    if not skills_context:
+        # No feature skills, remove placeholder if present
+        return content.replace("{{FEATURE_SKILLS}}", "")
+
+    # Replace placeholder if present
+    if "{{FEATURE_SKILLS}}" in content:
+        return content.replace("{{FEATURE_SKILLS}}", skills_context)
+
+    # Otherwise append skills section (before any existing skills section)
+    if "## Available Expert Skills" in content:
+        # Insert before the general skills section
+        return content.replace(
+            "## Available Expert Skills",
+            f"{skills_context}\n\n## Available Expert Skills"
+        )
+
+    # Append at the end
+    return content + f"\n\n{skills_context}"
+
+
 def get_initializer_prompt(project_dir: Path | None = None) -> str:
     """Load the initializer prompt with skills context (project-specific if available)."""
     return load_prompt("initializer_prompt", project_dir, mode="initializer")

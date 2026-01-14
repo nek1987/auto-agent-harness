@@ -1,6 +1,10 @@
 import { useState, useId } from 'react'
-import { X, Plus, Trash2, Loader2, AlertCircle, Bug, Sparkles } from 'lucide-react'
+import { X, Plus, Trash2, Loader2, AlertCircle, Bug, Sparkles, Brain, Zap } from 'lucide-react'
 import { useCreateFeature } from '../hooks/useProjects'
+import { useFeatureAnalysis } from '../hooks/useFeatureAnalysis'
+import { FeatureSuggestionsPanel, type Suggestion } from './FeatureSuggestionsPanel'
+import { SkillsAnalysisPanel } from './SkillsAnalysisPanel'
+import type { SubTask } from './TaskCard'
 
 interface Step {
   id: string
@@ -22,8 +26,13 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
   const [steps, setSteps] = useState<Step[]>([{ id: `${formId}-step-0`, value: '' }])
   const [error, setError] = useState<string | null>(null)
   const [stepCounter, setStepCounter] = useState(1)
+  const [showAnalysis, setShowAnalysis] = useState(false)
+  const [useSkillsAnalysis, setUseSkillsAnalysis] = useState(false)
+  const [showSkillsPanel, setShowSkillsPanel] = useState(false)
+  const [isCreatingTasks, setIsCreatingTasks] = useState(false)
 
   const createFeature = useCreateFeature(projectName)
+  const analysis = useFeatureAnalysis(projectName)
   const isBug = itemType === 'bug'
 
   const handleAddStep = () => {
@@ -41,14 +50,118 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
     ))
   }
 
+  // Filter and get current steps
+  const getFilteredSteps = () => {
+    return steps
+      .map(s => s.value.trim())
+      .filter(s => s.length > 0)
+  }
+
+  const handleAnalyze = () => {
+    setError(null)
+    setShowAnalysis(true)
+
+    const filteredSteps = getFilteredSteps()
+
+    analysis.analyze({
+      name: name.trim(),
+      category: isBug ? 'bug' : category.trim(),
+      description: description.trim(),
+      steps: filteredSteps,
+    })
+  }
+
+  const handleApplySuggestions = async (selectedSuggestions: Suggestion[]) => {
+    setError(null)
+
+    // Enhance description with selected suggestions
+    let enhancedDescription = description.trim()
+    const additionalSteps: string[] = []
+
+    for (const suggestion of selectedSuggestions) {
+      // Add suggestion info to description
+      enhancedDescription += `\n\n[${suggestion.type.toUpperCase()}] ${suggestion.title}: ${suggestion.description}`
+
+      // Add implementation steps
+      additionalSteps.push(...suggestion.implementationSteps)
+    }
+
+    // Combine existing steps with suggestion steps
+    const filteredSteps = getFilteredSteps()
+    const allSteps = [
+      ...filteredSteps,
+      ...additionalSteps.filter(step => !filteredSteps.includes(step)),
+    ]
+
+    try {
+      await createFeature.mutateAsync({
+        category: isBug ? 'bug' : category.trim(),
+        name: name.trim(),
+        description: enhancedDescription,
+        steps: allSteps.length > 0 ? allSteps : (isBug ? ['Reproduce the bug'] : []),
+        priority: isBug ? 0 : (priority ? parseInt(priority, 10) : undefined),
+        item_type: itemType,
+      })
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create ' + (isBug ? 'bug' : 'feature'))
+    }
+  }
+
+  const handleSkipAnalysis = () => {
+    analysis.clearAnalysis()
+    setShowAnalysis(false)
+  }
+
+  const handleCloseAnalysis = () => {
+    analysis.clearAnalysis()
+    setShowAnalysis(false)
+  }
+
+  const handleSkillsAnalyze = () => {
+    setError(null)
+    setShowSkillsPanel(true)
+  }
+
+  const handleSkillsTasksConfirmed = async (tasks: SubTask[]) => {
+    setIsCreatingTasks(true)
+    setError(null)
+
+    try {
+      // Create each task as a separate feature
+      for (const task of tasks) {
+        await createFeature.mutateAsync({
+          category: category.trim() || 'uncategorized',
+          name: task.title,
+          description: task.description,
+          steps: task.steps.length > 0 ? task.steps : [],
+          priority: priority ? parseInt(priority, 10) : undefined,
+          item_type: 'feature',
+          assigned_skills: task.assignedSkills.length > 0 ? task.assignedSkills : undefined,
+        })
+      }
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create features from tasks')
+    } finally {
+      setIsCreatingTasks(false)
+    }
+  }
+
+  const handleSkillsSkip = () => {
+    setShowSkillsPanel(false)
+  }
+
+  const handleSkillsClose = () => {
+    setShowSkillsPanel(false)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
 
     // Filter out empty steps
-    const filteredSteps = steps
-      .map(s => s.value.trim())
-      .filter(s => s.length > 0)
+    const filteredSteps = getFilteredSteps()
 
     try {
       await createFeature.mutateAsync({
@@ -66,6 +179,7 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
   }
 
   const isValid = (isBug || category.trim()) && name.trim() && description.trim()
+  const canAnalyze = !isBug && name.trim() && description.trim()
 
   return (
     <div className="neo-modal-backdrop" onClick={onClose}>
@@ -89,13 +203,18 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
           {/* Error Message */}
-          {error && (
+          {(error || analysis.error) && (
             <div className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-[var(--color-neo-danger)] text-white border-3 border-[var(--color-neo-border)]">
               <AlertCircle size={18} className="flex-shrink-0" />
-              <span className="text-sm sm:text-base">{error}</span>
+              <span className="text-sm sm:text-base">{error || analysis.error}</span>
               <button
                 type="button"
-                onClick={() => setError(null)}
+                onClick={() => {
+                  setError(null)
+                  if (analysis.error) {
+                    analysis.clearAnalysis()
+                  }
+                }}
                 className="ml-auto min-w-[32px] min-h-[32px] flex items-center justify-center"
               >
                 <X size={16} />
@@ -234,14 +353,89 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
             </button>
           </div>
 
+          {/* Skills Analysis Toggle - only for features */}
+          {!isBug && (
+            <div className="p-3 bg-[var(--color-neo-bg-alt)] border-3 border-[var(--color-neo-border)]">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div
+                  className={`
+                    w-6 h-6 border-3 border-[var(--color-neo-border)] flex items-center justify-center
+                    ${useSkillsAnalysis ? 'bg-[var(--color-neo-accent)]' : 'bg-white'}
+                  `}
+                  onClick={() => setUseSkillsAnalysis(!useSkillsAnalysis)}
+                >
+                  {useSkillsAnalysis && <Zap size={14} className="text-white" strokeWidth={3} />}
+                </div>
+                <div className="flex-1">
+                  <span className="font-display font-bold text-sm uppercase">
+                    Skills Analysis
+                  </span>
+                  <p className="text-xs text-[var(--color-neo-muted)] mt-0.5">
+                    AI подберет skills из каталога и декомпозирует задачу
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
+
+          {/* Skills Analysis Panel */}
+          {showSkillsPanel && (
+            <SkillsAnalysisPanel
+              projectName={projectName}
+              feature={{
+                name: name.trim(),
+                category: category.trim() || 'uncategorized',
+                description: description.trim(),
+                steps: getFilteredSteps(),
+              }}
+              onTasksConfirmed={handleSkillsTasksConfirmed}
+              onSkip={handleSkillsSkip}
+              onClose={handleSkillsClose}
+            />
+          )}
+
+          {/* AI Analysis Panel */}
+          {showAnalysis && (
+            <FeatureSuggestionsPanel
+              suggestions={analysis.suggestions}
+              complexity={analysis.complexity}
+              isAnalyzing={analysis.isAnalyzing}
+              onToggleSuggestion={analysis.toggleSuggestion}
+              onRemoveSuggestion={analysis.removeSuggestion}
+              onEditSuggestion={analysis.editSuggestion}
+              onApply={handleApplySuggestions}
+              onSkip={handleSkipAnalysis}
+              onClose={handleCloseAnalysis}
+            />
+          )}
+
           {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 border-t-3 border-[var(--color-neo-border)]">
+            {/* AI Analyze Button - only for features */}
+            {!isBug && !showAnalysis && !showSkillsPanel && (
+              <button
+                type="button"
+                onClick={useSkillsAnalysis ? handleSkillsAnalyze : handleAnalyze}
+                disabled={!canAnalyze || createFeature.isPending || isCreatingTasks}
+                className={`neo-btn flex-1 min-h-[48px] justify-center ${
+                  useSkillsAnalysis ? 'neo-btn-primary' : 'neo-btn-accent'
+                }`}
+                title={useSkillsAnalysis
+                  ? "Analyze feature with skills and decompose into tasks"
+                  : "Analyze feature with AI and get improvement suggestions"
+                }
+              >
+                {useSkillsAnalysis ? <Zap size={18} /> : <Brain size={18} />}
+                {useSkillsAnalysis ? 'Skills Analysis' : 'Analyze with AI'}
+              </button>
+            )}
+
             <button
               type="submit"
-              disabled={!isValid || createFeature.isPending}
+              disabled={!isValid || createFeature.isPending || analysis.isAnalyzing || isCreatingTasks || showSkillsPanel}
               className={`neo-btn flex-1 min-h-[48px] justify-center ${isBug ? 'neo-btn-danger' : 'neo-btn-success'}`}
             >
-              {createFeature.isPending ? (
+              {(createFeature.isPending || isCreatingTasks) ? (
                 <Loader2 size={18} className="animate-spin" />
               ) : (
                 <>

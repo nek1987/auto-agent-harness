@@ -72,6 +72,7 @@ export interface Feature {
   item_type: ItemType
   parent_bug_id: number | null
   bug_status: BugStatus | null
+  assigned_skills: string[] | null
 }
 
 export interface FeatureListResponse {
@@ -87,6 +88,7 @@ export interface FeatureCreate {
   steps: string[]
   priority?: number
   item_type?: ItemType
+  assigned_skills?: string[]
 }
 
 // Agent types
