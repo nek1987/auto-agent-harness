@@ -563,6 +563,19 @@ Component code to analyze:
                 }]
             })
 
+        # Fallback: If no config files found, create a default design system phase
+        if not phases:
+            phases.append({
+                "name": "create_design_system",
+                "description": "Create design system CSS from extracted tokens",
+                "files": [{
+                    "path": "src/styles/design-tokens.css",
+                    "action": "create",
+                    "changes": self._generate_css_changes(tokens),
+                }]
+            })
+            logger.info("No existing config files found, creating default design-tokens.css phase")
+
         return {
             "output_format": output_format,
             "framework": framework_info.identifier,

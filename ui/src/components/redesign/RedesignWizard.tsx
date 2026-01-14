@@ -37,6 +37,7 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
   const [error, setError] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [uploadedComponentsCount, setUploadedComponentsCount] = useState(0)
+  const [isStartingAgent, setIsStartingAgent] = useState(false)
 
   // Load existing session on mount
   useEffect(() => {
@@ -182,6 +183,28 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
 
   const handleComponentsUploaded = (count: number, _sessionId: number) => {
     setUploadedComponentsCount(prev => prev + count)
+  }
+
+  const startRedesignAgent = async () => {
+    setIsStartingAgent(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/projects/${projectName}/agent/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ yolo_mode: false }),
+      })
+      if (response.ok) {
+        onClose()
+      } else {
+        const err = await response.json()
+        setError(err.detail || 'Failed to start agent')
+      }
+    } catch (err) {
+      setError('Failed to start agent')
+    } finally {
+      setIsStartingAgent(false)
+    }
   }
 
   const getStepIndex = (step: WizardStep) => STEPS.findIndex(s => s.key === step)
@@ -357,11 +380,21 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
               </p>
               <div className="flex items-center justify-center gap-4">
                 <button
-                  onClick={onClose}
+                  onClick={startRedesignAgent}
+                  disabled={isStartingAgent}
                   className="neo-btn neo-btn-success"
                 >
-                  <Play size={18} />
-                  Start Agent
+                  {isStartingAgent ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      <Play size={18} />
+                      Start Agent
+                    </>
+                  )}
                 </button>
               </div>
             </div>
