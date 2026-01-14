@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import {
   X,
   Upload,
@@ -213,25 +212,16 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
   }
 
   if (isLoading) {
-    return createPortal(
-      <div className="neo-modal-backdrop" onClick={onClose}>
-        <div className="neo-modal w-full max-w-4xl" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-center p-12">
-            <Loader2 className="animate-spin" size={32} />
-            <span className="ml-3 font-display">Loading...</span>
-          </div>
-        </div>
-      </div>,
-      document.body
+    return (
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="animate-spin" size={32} />
+        <span className="ml-3 font-display">Loading...</span>
+      </div>
     )
   }
 
-  return createPortal(
-    <div className="neo-modal-backdrop" onClick={onClose}>
-      <div
-        className="neo-modal w-full max-w-4xl max-h-[90vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
+  return (
+    <>
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b-3 border-[var(--color-neo-border)]">
           <div className="flex items-center gap-3">
@@ -422,8 +412,6 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
             )}
           </div>
         </div>
-      </div>
-    </div>,
-    document.body
+    </>
   )
 }

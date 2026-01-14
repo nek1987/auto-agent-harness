@@ -50,11 +50,6 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
   const isBug = itemType === 'bug'
   const isRedesign = itemType === 'redesign'
 
-  // If redesign mode, show the wizard instead
-  if (isRedesign) {
-    return <RedesignWizard projectName={projectName} onClose={onClose} />
-  }
-
   // Auto-analyze complexity when description or steps change significantly
   const analyzeComplexity = useCallback(async () => {
     if (isBug || !name.trim() || !description.trim()) {
@@ -272,6 +267,20 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
 
   const isValid = (isBug || category.trim()) && name.trim() && description.trim()
   const canAnalyze = !isBug && name.trim() && description.trim()
+
+  // For redesign mode, render the wizard inside the modal
+  if (isRedesign) {
+    return (
+      <div className="neo-modal-backdrop" onClick={onClose}>
+        <div
+          className="neo-modal w-full max-w-4xl max-h-[90vh] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <RedesignWizard projectName={projectName} onClose={onClose} />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="neo-modal-backdrop" onClick={onClose}>
