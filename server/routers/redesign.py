@@ -50,7 +50,7 @@ def get_db_session(project_dir: Path):
     Context manager for database sessions.
     Creates a project-specific session and ensures it is closed.
     """
-    create_database, _ = _get_db_classes()
+    create_database, _, _ = _get_db_classes()
     _, SessionLocal = create_database(project_dir)
     session = SessionLocal()
     try:
