@@ -265,14 +265,22 @@ async def extract_tokens(
         if not session:
             raise HTTPException(status_code=404, detail="No active redesign session")
 
-        if not session.references:
-            raise HTTPException(status_code=400, detail="No references uploaded")
+        # Check for either references OR linked component session
+        has_references = session.references and len(session.references) > 0
+        has_components = session.component_session_id is not None
+
+        if not has_references and not has_components:
+            raise HTTPException(
+                status_code=400,
+                detail="No references or components uploaded. Upload images or a ZIP file first."
+            )
 
         try:
             session = await service.extract_tokens(session.id)
             return {
                 "status": "ok",
                 "tokens": session.extracted_tokens,
+                "source": "images" if has_references else "components",
             }
         except Exception as e:
             logger.error(f"Token extraction failed: {e}")

@@ -936,3 +936,43 @@ class ComponentReferenceService:
 
         logger.info(f"Deleted page reference for {page_identifier}")
         return True
+
+    async def link_to_redesign_session(
+        self,
+        component_session_id: int,
+        redesign_session_id: int,
+    ) -> int:
+        """
+        Link this component session to a redesign session.
+
+        This allows ZIP component uploads to be used for design token extraction
+        in the redesign workflow.
+
+        Args:
+            component_session_id: ID of the ComponentReferenceSession
+            redesign_session_id: ID of the RedesignSession to link to
+
+        Returns:
+            The redesign_session_id if successful
+
+        Raises:
+            ValueError: If redesign session not found
+        """
+        from api.database import RedesignSession
+
+        redesign_session = self.db.query(RedesignSession).filter(
+            RedesignSession.id == redesign_session_id
+        ).first()
+
+        if not redesign_session:
+            raise ValueError(f"RedesignSession {redesign_session_id} not found")
+
+        redesign_session.component_session_id = component_session_id
+        redesign_session.updated_at = datetime.utcnow()
+        self.db.commit()
+
+        logger.info(
+            f"Linked component session {component_session_id} "
+            f"to redesign session {redesign_session_id}"
+        )
+        return redesign_session_id

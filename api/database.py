@@ -129,8 +129,14 @@ class RedesignSession(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Link to ComponentReferenceSession for ZIP component uploads
+    component_session_id = Column(Integer, ForeignKey("component_reference_sessions.id"), nullable=True, index=True)
+
     # Relationship to approvals
     approvals = relationship("RedesignApproval", back_populates="session", cascade="all, delete-orphan")
+
+    # Relationship to linked component reference session
+    component_session = relationship("ComponentReferenceSession", foreign_keys=[component_session_id])
 
     def to_dict(self) -> dict:
         """Convert session to dictionary for JSON serialization."""
@@ -144,6 +150,7 @@ class RedesignSession(Base):
             "change_plan": self.change_plan,
             "framework_detected": self.framework_detected,
             "error_message": self.error_message,
+            "component_session_id": self.component_session_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "approvals": [a.to_dict() for a in self.approvals] if self.approvals else [],
@@ -536,6 +543,14 @@ def _migrate_database(engine) -> None:
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_project_page_structures_project_name ON project_page_structures(project_name)"))
         conn.commit()
+
+        # Migration 13: Add component_session_id to redesign_sessions for ZIP component linking
+        result = conn.execute(text("PRAGMA table_info(redesign_sessions)"))
+        redesign_columns = [row[1] for row in result.fetchall()]
+        if "component_session_id" not in redesign_columns:
+            conn.execute(text("ALTER TABLE redesign_sessions ADD COLUMN component_session_id INTEGER"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_redesign_sessions_component_session_id ON redesign_sessions(component_session_id)"))
+            conn.commit()
 
 
 def create_database(project_dir: Path) -> tuple:

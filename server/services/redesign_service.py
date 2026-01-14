@@ -167,6 +167,11 @@ class RedesignService:
         """
         Extract design tokens from session references using Claude Vision.
 
+        Supports extraction from:
+        - Image references (PNG, JPG, WebP via Vision API)
+        - URL references (screenshots via Vision API)
+        - Component code (via linked ComponentReferenceSession)
+
         Args:
             session_id: ID of the redesign session
 
@@ -177,8 +182,12 @@ class RedesignService:
         if not session:
             raise ValueError(f"Session {session_id} not found")
 
-        if not session.references:
-            raise ValueError("No references to extract tokens from")
+        # Check for both references AND linked component session
+        has_references = session.references and len(session.references) > 0
+        has_components = session.component_session_id is not None
+
+        if not has_references and not has_components:
+            raise ValueError("No references or components to extract tokens from")
 
         session.status = "extracting"
         session.current_phase = "tokens"
@@ -187,13 +196,24 @@ class RedesignService:
         try:
             # Extract tokens from each reference
             all_tokens = []
-            for ref in session.references:
-                if ref["type"] in ("image", "url"):
-                    tokens = await self._extract_tokens_from_image(ref["data"])
-                    all_tokens.append(tokens)
-                elif ref["type"] == "figma":
-                    # TODO: Implement Figma MCP integration
-                    pass
+
+            # Extract from image references
+            if has_references:
+                for ref in session.references:
+                    if ref["type"] in ("image", "url"):
+                        tokens = await self._extract_tokens_from_image(ref["data"])
+                        all_tokens.append(tokens)
+                    elif ref["type"] == "figma":
+                        # TODO: Implement Figma MCP integration
+                        pass
+
+            # Extract from linked component code
+            if has_components:
+                component_tokens = await self._extract_tokens_from_components(
+                    session.component_session_id
+                )
+                if component_tokens:
+                    all_tokens.append(component_tokens)
 
             # Merge tokens from multiple references
             merged_tokens = await self._merge_tokens(all_tokens)
@@ -288,6 +308,109 @@ Extract what you can see. Use hex colors. Return ONLY valid JSON."""
             return json.loads(json_match.group(0))
 
         raise ValueError("Could not extract JSON from Vision API response")
+
+    async def _extract_tokens_from_components(self, component_session_id: int) -> Optional[dict]:
+        """
+        Extract design tokens from component code in a linked ComponentReferenceSession.
+
+        Analyzes React/Vue/Svelte component code to extract:
+        - Tailwind class colors (bg-blue-500, text-gray-900)
+        - CSS custom properties (--color-primary)
+        - Inline style colors and spacing
+        - Spacing patterns from Tailwind classes
+
+        Args:
+            component_session_id: ID of the ComponentReferenceSession
+
+        Returns:
+            Dictionary of extracted tokens, or None if no components found
+        """
+        from api.database import ComponentReferenceSession
+
+        component_session = self.db.query(ComponentReferenceSession).filter(
+            ComponentReferenceSession.id == component_session_id
+        ).first()
+
+        if not component_session or not component_session.components:
+            logger.warning(f"No components found in session {component_session_id}")
+            return None
+
+        # Collect component code snippets (limit to first 10 to avoid token limits)
+        components = component_session.components
+        code_snippets = []
+
+        for comp in components[:10]:
+            if comp.get("file_type") == "component":
+                content = comp.get("content", "")[:3000]  # Limit content size
+                code_snippets.append(f"// {comp['filename']}\n{content}")
+
+        if not code_snippets:
+            logger.warning(f"No component code found in session {component_session_id}")
+            return None
+
+        combined_code = "\n\n---\n\n".join(code_snippets)
+
+        prompt = """Analyze these UI component code files and extract design tokens.
+
+Look for:
+1. Tailwind classes: bg-*, text-*, border-*, p-*, m-*, gap-*, rounded-*, shadow-*
+2. CSS variables: --color-*, --spacing-*, --radius-*
+3. Inline styles with colors and spacing
+4. CSS-in-JS theme values
+5. Color definitions in constants/config files
+
+Output as JSON:
+{
+  "colors": {
+    "primary": {"500": "#HEXVAL"},
+    "secondary": {"500": "#HEXVAL"},
+    "neutral": {"50": "#...", "100": "#...", "500": "#...", "900": "#..."}
+  },
+  "typography": {
+    "fontFamily": {"sans": ["Font Name", "fallback"]}
+  },
+  "spacing": {"4": "16px", "8": "32px"},
+  "borders": {"radius": {"md": "8px"}},
+  "shadows": {"md": "shadow value"}
+}
+
+Infer hex values from Tailwind class names if needed:
+- blue-500 = #3B82F6
+- gray-900 = #111827
+- green-500 = #22C55E
+- red-500 = #EF4444
+
+Return ONLY valid JSON.
+
+Component code to analyze:
+""" + combined_code
+
+        try:
+            message = self.anthropic_client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4096,
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            response_text = message.content[0].text
+
+            # Try to find JSON in response
+            import re
+            json_match = re.search(r"\{[\s\S]*\}", response_text)
+            if json_match:
+                tokens = json.loads(json_match.group(0))
+                logger.info(
+                    f"Extracted tokens from {len(code_snippets)} components "
+                    f"in session {component_session_id}"
+                )
+                return tokens
+
+            logger.warning("Could not extract JSON from component analysis response")
+            return None
+
+        except Exception as e:
+            logger.error(f"Component token extraction failed: {e}")
+            return None
 
     async def _merge_tokens(self, token_sets: list[dict]) -> dict:
         """

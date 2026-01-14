@@ -180,7 +180,7 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
     loadSession()
   }
 
-  const handleComponentsUploaded = (count: number) => {
+  const handleComponentsUploaded = (count: number, _sessionId: number) => {
     setUploadedComponentsCount(prev => prev + count)
   }
 
@@ -323,6 +323,7 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
               references={session.references || []}
               onReferenceAdded={handleReferenceAdded}
               onComponentsUploaded={handleComponentsUploaded}
+              redesignSessionId={session.id}
             />
           )}
 

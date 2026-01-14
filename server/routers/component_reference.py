@@ -181,12 +181,16 @@ async def upload_zip(
     file: UploadFile = File(...),
     source_type: str = Form("custom"),
     source_url: str = Form(None),
+    redesign_session_id: Optional[int] = Form(None),
 ):
     """
     Upload a ZIP file with component code.
 
     Extracts React/Vue/Svelte components from the ZIP and stores
     them for analysis. Automatically detects framework and file types.
+
+    If redesign_session_id is provided, links this component session
+    to the redesign session for integrated token extraction.
     """
     # Validate file type first
     if not file.filename or not file.filename.lower().endswith(".zip"):
@@ -222,10 +226,20 @@ async def upload_zip(
                 content,
                 filename=file.filename,
             )
+
+            # Link to redesign session if provided
+            linked_redesign_id = None
+            if redesign_session_id:
+                linked_redesign_id = await service.link_to_redesign_session(
+                    session.id,
+                    redesign_session_id,
+                )
+
             return {
                 "status": "ok",
                 "session_id": session.id,
                 "components_count": len(session.components or []),
+                "linked_redesign_session_id": linked_redesign_id,
                 "components": [
                     {
                         "filename": c["filename"],

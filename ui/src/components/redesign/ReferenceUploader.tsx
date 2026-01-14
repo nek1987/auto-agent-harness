@@ -24,7 +24,8 @@ interface ReferenceUploaderProps {
   projectName: string
   references: RedesignReference[]
   onReferenceAdded: () => void
-  onComponentsUploaded?: (count: number) => void
+  onComponentsUploaded?: (count: number, sessionId: number) => void
+  redesignSessionId?: number
 }
 
 export function ReferenceUploader({
@@ -32,6 +33,7 @@ export function ReferenceUploader({
   references,
   onReferenceAdded,
   onComponentsUploaded,
+  redesignSessionId,
 }: ReferenceUploaderProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [urlInput, setUrlInput] = useState('')
@@ -42,6 +44,7 @@ export function ReferenceUploader({
   const [uploadedComponents, setUploadedComponents] = useState<UploadedComponent[]>([])
   const [isUploadingZip, setIsUploadingZip] = useState(false)
   const [zipUploadSuccess, setZipUploadSuccess] = useState(false)
+  const [zipFilename, setZipFilename] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const zipInputRef = useRef<HTMLInputElement>(null)
 
@@ -162,6 +165,10 @@ export function ReferenceUploader({
       const formData = new FormData()
       formData.append('file', file)
       formData.append('source_type', 'custom')
+      // Link to redesign session if provided
+      if (redesignSessionId) {
+        formData.append('redesign_session_id', redesignSessionId.toString())
+      }
 
       const response = await fetch(
         `/api/projects/${projectName}/component-reference/upload-zip`,
@@ -176,9 +183,10 @@ export function ReferenceUploader({
         const components = data.components || []
         setUploadedComponents(components)
         setZipUploadSuccess(true)
+        setZipFilename(file.name)
         onReferenceAdded()
-        if (onComponentsUploaded) {
-          onComponentsUploaded(components.length)
+        if (onComponentsUploaded && data.session_id) {
+          onComponentsUploaded(components.length, data.session_id)
         }
       } else {
         const err = await response.json()
@@ -189,7 +197,7 @@ export function ReferenceUploader({
     } finally {
       setIsUploadingZip(false)
     }
-  }, [projectName, onReferenceAdded, onComponentsUploaded])
+  }, [projectName, onReferenceAdded, onComponentsUploaded, redesignSessionId])
 
   const handleZipDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -278,6 +286,11 @@ export function ReferenceUploader({
             <h3 className="font-display font-bold mb-1 text-sm text-[var(--color-neo-success)]">
               ZIP Uploaded Successfully!
             </h3>
+            {zipFilename && (
+              <p className="text-xs font-medium mb-1 truncate max-w-full px-2">
+                {zipFilename}
+              </p>
+            )}
             <p className="text-xs text-[var(--color-neo-muted)] mb-3">
               {uploadedComponents.length} components extracted
             </p>
@@ -285,6 +298,7 @@ export function ReferenceUploader({
               onClick={() => {
                 setZipUploadSuccess(false)
                 setUploadedComponents([])
+                setZipFilename(null)
               }}
               className="neo-btn neo-btn-ghost text-sm"
             >
