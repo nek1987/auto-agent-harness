@@ -19,6 +19,7 @@ slowapi>=0.1.9
 # Utilities
 psutil>=6.0.0
 aiofiles>=24.0.0
+requests>=2.31.0
 
 # Dev dependencies
 ruff>=0.8.0
