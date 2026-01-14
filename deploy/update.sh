@@ -3,7 +3,7 @@
 # Auto Agent Harness - Update Script
 # ===================================
 #
-# Updates the application from git, rebuilds frontend, and restarts service.
+# Updates the application from git, rebuilds frontend. Does NOT start service.
 #
 # Usage:
 #   cd /path/to/auto-agent-harness
@@ -42,7 +42,7 @@ echo "Project directory: $PROJECT_DIR"
 echo ""
 
 # Step 1: Stop service (if running)
-echo "[1/5] Stopping service..."
+echo "[1/4] Stopping service..."
 if [ -n "$SERVICE_EXISTS" ]; then
     sudo systemctl stop $SERVICE_NAME 2>/dev/null || true
     echo -e "${GREEN}Service stopped${NC}"
@@ -52,7 +52,7 @@ fi
 
 # Step 2: Pull latest code
 echo ""
-echo "[2/5] Pulling latest code..."
+echo "[2/4] Pulling latest code..."
 git fetch origin
 CHANGES=$(git log HEAD..origin/main --oneline)
 if [ -z "$CHANGES" ]; then
@@ -67,7 +67,7 @@ fi
 
 # Step 3: Update Python dependencies
 echo ""
-echo "[3/5] Updating Python dependencies..."
+echo "[3/4] Updating Python dependencies..."
 if [ -f "venv/bin/activate" ]; then
     source venv/bin/activate
     pip install -r requirements.txt --quiet
@@ -82,7 +82,7 @@ fi
 
 # Step 4: Rebuild frontend
 echo ""
-echo "[4/5] Rebuilding frontend..."
+echo "[4/4] Rebuilding frontend..."
 if [ -d "ui" ]; then
     cd ui
 
@@ -106,59 +106,6 @@ else
     echo -e "${YELLOW}UI directory not found, skipping frontend build${NC}"
 fi
 
-# Step 5: Start service
-echo ""
-echo "[5/5] Starting service..."
-if [ -n "$SERVICE_EXISTS" ]; then
-    sudo systemctl start $SERVICE_NAME
-    sleep 2
-
-    # Check if service started successfully
-    if sudo systemctl is-active --quiet $SERVICE_NAME; then
-        echo -e "${GREEN}Service started successfully${NC}"
-    else
-        echo -e "${RED}Service failed to start!${NC}"
-        sudo journalctl -u $SERVICE_NAME -n 20 --no-pager
-        exit 1
-    fi
-else
-    echo -e "${YELLOW}Service not installed. Starting manually...${NC}"
-
-    # Check if .env file exists
-    if [ ! -f ".env" ]; then
-        echo -e "${RED}ERROR: .env file not found!${NC}"
-        echo ""
-        echo "Please create .env file first:"
-        echo "  cp .env.native.example .env    # For local development"
-        echo "  cp .env.docker.example .env    # For Docker deployment"
-        echo ""
-        echo "Then edit .env with your settings and run this script again."
-        exit 1
-    fi
-
-    # Load environment variables from .env
-    echo "Loading environment from .env..."
-    set -a
-    source .env
-    set +a
-
-    # Use variables from .env with defaults
-    HOST="${HOST:-127.0.0.1}"
-    PORT="${PORT:-8888}"
-
-    echo "Starting server on $HOST:$PORT..."
-    source venv/bin/activate
-    nohup python -m uvicorn server.main:app --host "$HOST" --port "$PORT" > /tmp/auto-agent.log 2>&1 &
-
-    sleep 2
-    if curl -s "http://$HOST:$PORT/api/health" > /dev/null 2>&1; then
-        echo -e "${GREEN}Server started successfully on $HOST:$PORT${NC}"
-    else
-        echo -e "${YELLOW}Server may still be starting. Check logs:${NC}"
-        echo "  tail -f /tmp/auto-agent.log"
-    fi
-fi
-
 # Summary
 echo ""
 echo "========================================"
@@ -166,23 +113,15 @@ echo -e "  ${GREEN}Update Complete!${NC}"
 echo "========================================"
 echo ""
 
+echo "To start the service:"
 if [ -n "$SERVICE_EXISTS" ]; then
-    echo "Service status:"
-    sudo systemctl status $SERVICE_NAME --no-pager -l | head -15
+    echo "  sudo systemctl start $SERVICE_NAME"
     echo ""
     echo "View logs:"
     echo "  sudo journalctl -u $SERVICE_NAME -f"
     echo "  tail -f /var/log/auto-agent/server.log"
-fi
-
-echo ""
-if [ -n "$HOST" ] && [ -n "$PORT" ]; then
-    if [ "$HOST" = "127.0.0.1" ] || [ "$HOST" = "localhost" ]; then
-        echo "Server URL: http://localhost:$PORT"
-    else
-        echo "Server URL: http://$(hostname -I | awk '{print $1}'):$PORT"
-    fi
 else
-    echo "Server URL: http://$(hostname -I | awk '{print $1}'):8888"
+    echo "  source venv/bin/activate"
+    echo "  python -m uvicorn server.main:app --host 0.0.0.0 --port 8888"
 fi
 echo ""
