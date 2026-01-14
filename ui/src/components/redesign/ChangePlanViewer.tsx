@@ -2,7 +2,6 @@ import { useState } from 'react'
 import {
   FileCode,
   CheckCircle2,
-  Circle,
   ChevronDown,
   ChevronRight,
   File,

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import {
   X,
   Upload,
-  Link,
   Palette,
   FileCode,
   CheckCircle2,
@@ -10,18 +9,12 @@ import {
   AlertCircle,
   ChevronRight,
   ChevronLeft,
-  Eye,
   Play,
 } from 'lucide-react'
 import { ReferenceUploader } from './ReferenceUploader'
 import { DesignTokenPreview } from './DesignTokenPreview'
 import { ChangePlanViewer } from './ChangePlanViewer'
-import type {
-  RedesignSession,
-  RedesignReference,
-  DesignTokens,
-  ChangePlan,
-} from '../../lib/types'
+import type { RedesignSession } from '../../lib/types'
 
 interface RedesignWizardProps {
   projectName: string
