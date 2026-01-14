@@ -123,11 +123,29 @@ The skills context contains best practices, patterns, and guidelines from expert
 
 #### Load Component Reference (If Available)
 
-If the feature has a `reference_session_id`, it means a component reference session was linked to provide design patterns from external sources (e.g., v0.dev, shadcn/ui). Load the reference context:
+Component references provide design patterns from external sources (e.g., v0.dev, shadcn/ui).
+The system supports **multi-page references** - different ZIP files for different pages (dashboard, login, settings, etc.).
+
+**Auto-matching**: Use `component_ref_get_for_feature` to automatically find the best page reference:
 
 ```
-# Get component reference analysis for this feature
-Use the component_ref_get_analysis tool
+# Get auto-matched component reference for this feature
+Use the component_ref_get_for_feature tool with feature_id=42
+```
+
+The tool will:
+1. Check if the feature has a direct `page_reference_id` link (highest priority)
+2. Auto-match based on feature category, name, and description keywords
+3. Return the matching reference with analysis and plan
+
+If no auto-match is found, you can check available page references:
+
+```
+# List all page references for this project
+Use the component_ref_list_references tool
+
+# Scan project to see detected pages
+Use the component_ref_scan_project tool
 ```
 
 The reference context contains:
@@ -135,6 +153,7 @@ The reference context contains:
 - **Styling**: How to apply similar styling using project's design system
 - **Props**: Interface patterns to follow
 - **Hooks**: State management patterns
+- **Page-specific**: Patterns tailored to the specific page (dashboard, login, etc.)
 
 **CRITICAL**: Create NEW components inspired by the reference patterns. DO NOT copy code directly. Adapt to:
 - Project's existing architecture and folder structure

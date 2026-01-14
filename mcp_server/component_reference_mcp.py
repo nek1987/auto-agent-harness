@@ -37,7 +37,14 @@ from pydantic import Field
 # Add parent directory to path so we can import from api module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from api.database import ComponentReferenceSession, Feature, create_database
+from api.database import (
+    ComponentReferenceSession,
+    Feature,
+    PageReference,
+    ProjectPageStructure,
+    create_database,
+)
+from lib.page_detector import PageDetector, match_feature_to_page_reference
 
 # Configuration from environment
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", ".")).resolve()
@@ -937,6 +944,449 @@ def component_ref_complete() -> str:
             "success": True,
             "session_id": session.id,
             "message": "Component reference session completed successfully!"
+        })
+
+    finally:
+        db_session.close()
+
+
+# ============================================================================
+# Multi-Page Reference Tools
+# ============================================================================
+
+@mcp.tool()
+def component_ref_scan_project() -> str:
+    """Scan the project to detect all pages and routes.
+
+    Analyzes the project structure to identify:
+    - Framework routing type (Next.js App/Pages Router, React Router, etc.)
+    - All pages with their routes
+    - Layout components
+    - Key UI sections
+
+    Use this to understand the project's page structure before uploading
+    reference components for specific pages.
+
+    Returns:
+        JSON with detected pages, routes, and framework info.
+    """
+    try:
+        detector = PageDetector()
+        result = detector.scan(PROJECT_DIR)
+
+        return json.dumps({
+            "success": True,
+            "framework_type": result.framework_type,
+            "pages": [p.to_dict() for p in result.pages],
+            "layouts": [l.to_dict() for l in result.layouts],
+            "total_pages": len(result.pages),
+            "total_layouts": len(result.layouts),
+            "message": f"Found {len(result.pages)} pages using {result.framework_type} routing"
+        }, indent=2)
+
+    except Exception as e:
+        return json.dumps({
+            "error": f"Project scan failed: {str(e)}"
+        })
+
+
+@mcp.tool()
+def component_ref_list_references() -> str:
+    """List all page references for the current project.
+
+    Returns all PageReference entries linked to ComponentReferenceSessions,
+    showing which pages have reference components uploaded.
+
+    Returns:
+        JSON with list of page references and their status.
+    """
+    project_name = PROJECT_DIR.name
+
+    db_session = get_session()
+    try:
+        # Get all page references for this project
+        refs = (
+            db_session.query(PageReference)
+            .filter(PageReference.project_name == project_name)
+            .order_by(PageReference.page_identifier)
+            .all()
+        )
+
+        if not refs:
+            return json.dumps({
+                "has_references": False,
+                "references": [],
+                "message": "No page references found. Upload references using component_ref_upload_for_page."
+            })
+
+        references = []
+        for ref in refs:
+            ref_data = ref.to_dict()
+
+            # Get linked session status
+            if ref.reference_session_id:
+                session = db_session.query(ComponentReferenceSession).filter(
+                    ComponentReferenceSession.id == ref.reference_session_id
+                ).first()
+                if session:
+                    ref_data["session_status"] = session.status
+                    ref_data["components_count"] = len(session.components or [])
+                    ref_data["has_analysis"] = session.extracted_analysis is not None
+
+            references.append(ref_data)
+
+        return json.dumps({
+            "has_references": True,
+            "total": len(references),
+            "references": references,
+        }, indent=2)
+
+    finally:
+        db_session.close()
+
+
+@mcp.tool()
+def component_ref_get_for_feature(
+    feature_id: Annotated[int, Field(description="ID of the feature to find reference for")],
+) -> str:
+    """Get the best matching page reference for a feature.
+
+    Uses auto-matching logic to find the most appropriate page reference
+    based on:
+    1. Direct page_reference_id link on the feature (highest priority)
+    2. Feature category matching page identifiers
+    3. Feature name/description matching keywords
+
+    Args:
+        feature_id: The feature ID to match
+
+    Returns:
+        JSON with matched reference or None if no match.
+    """
+    project_name = PROJECT_DIR.name
+
+    db_session = get_session()
+    try:
+        # Get the feature
+        feature = db_session.query(Feature).filter(Feature.id == feature_id).first()
+        if not feature:
+            return json.dumps({
+                "error": f"Feature {feature_id} not found."
+            })
+
+        # 1. Check direct page_reference_id link
+        if feature.page_reference_id:
+            ref = db_session.query(PageReference).filter(
+                PageReference.id == feature.page_reference_id
+            ).first()
+            if ref:
+                ref_data = ref.to_dict()
+
+                # Get session analysis if available
+                if ref.reference_session_id:
+                    session = db_session.query(ComponentReferenceSession).filter(
+                        ComponentReferenceSession.id == ref.reference_session_id
+                    ).first()
+                    if session and session.extracted_analysis:
+                        ref_data["analysis"] = session.extracted_analysis
+                        ref_data["plan"] = session.generation_plan
+
+                return json.dumps({
+                    "matched": True,
+                    "match_type": "direct_link",
+                    "feature_id": feature_id,
+                    "reference": ref_data,
+                }, indent=2)
+
+        # 2. Auto-match based on category/name/description
+        refs = (
+            db_session.query(PageReference)
+            .filter(
+                PageReference.project_name == project_name,
+                PageReference.auto_match_enabled == True,
+            )
+            .all()
+        )
+
+        if refs:
+            ref_dicts = [r.to_dict() for r in refs]
+            matched_ref = match_feature_to_page_reference(
+                feature.category or "",
+                feature.name or "",
+                feature.description or "",
+                ref_dicts,
+            )
+
+            if matched_ref:
+                # Get full reference with session data
+                ref = db_session.query(PageReference).filter(
+                    PageReference.id == matched_ref["id"]
+                ).first()
+
+                if ref and ref.reference_session_id:
+                    session = db_session.query(ComponentReferenceSession).filter(
+                        ComponentReferenceSession.id == ref.reference_session_id
+                    ).first()
+                    if session and session.extracted_analysis:
+                        matched_ref["analysis"] = session.extracted_analysis
+                        matched_ref["plan"] = session.generation_plan
+
+                return json.dumps({
+                    "matched": True,
+                    "match_type": "auto_matched",
+                    "feature_id": feature_id,
+                    "reference": matched_ref,
+                }, indent=2)
+
+        return json.dumps({
+            "matched": False,
+            "feature_id": feature_id,
+            "message": "No matching page reference found for this feature."
+        })
+
+    finally:
+        db_session.close()
+
+
+@mcp.tool()
+def component_ref_create_page_binding(
+    page_identifier: Annotated[str, Field(description="Page route/identifier (e.g., '/dashboard', '/login')")],
+    session_id: Annotated[int, Field(description="ID of the ComponentReferenceSession to link")],
+    display_name: Annotated[str, Field(description="Human-readable name for the page (e.g., 'Dashboard Page')")] = "",
+    match_keywords: Annotated[str, Field(description="JSON array of keywords for auto-matching (e.g., '[\"dashboard\", \"analytics\"]')")] = "[]",
+) -> str:
+    """Create a binding between a page identifier and a reference session.
+
+    Links a specific page/route to a ComponentReferenceSession so that
+    features related to that page can automatically receive the reference context.
+
+    Args:
+        page_identifier: The page route (e.g., '/dashboard')
+        session_id: ID of the reference session with uploaded components
+        display_name: Optional human-readable name
+        match_keywords: JSON array of keywords for auto-matching
+
+    Returns:
+        JSON with created PageReference.
+    """
+    project_name = PROJECT_DIR.name
+
+    db_session = get_session()
+    try:
+        # Verify session exists
+        session = db_session.query(ComponentReferenceSession).filter(
+            ComponentReferenceSession.id == session_id
+        ).first()
+
+        if not session:
+            return json.dumps({
+                "error": f"ComponentReferenceSession {session_id} not found."
+            })
+
+        # Parse keywords
+        try:
+            keywords = json.loads(match_keywords) if match_keywords else []
+            if not isinstance(keywords, list):
+                keywords = []
+        except json.JSONDecodeError:
+            keywords = []
+
+        # Check if binding already exists
+        existing = (
+            db_session.query(PageReference)
+            .filter(
+                PageReference.project_name == project_name,
+                PageReference.page_identifier == page_identifier,
+            )
+            .first()
+        )
+
+        if existing:
+            # Update existing binding
+            existing.reference_session_id = session_id
+            existing.display_name = display_name or existing.display_name
+            existing.match_keywords = keywords if keywords else existing.match_keywords
+            existing.updated_at = datetime.utcnow()
+            db_session.commit()
+            db_session.refresh(existing)
+
+            return json.dumps({
+                "success": True,
+                "action": "updated",
+                "page_reference": existing.to_dict(),
+                "message": f"Updated binding for page '{page_identifier}' to session {session_id}"
+            }, indent=2)
+
+        # Create new binding
+        page_ref = PageReference(
+            project_name=project_name,
+            page_type="page",
+            page_identifier=page_identifier,
+            reference_session_id=session_id,
+            display_name=display_name or page_identifier.strip("/").replace("/", " ").title() + " Page",
+            match_keywords=keywords,
+            auto_match_enabled=True,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        db_session.add(page_ref)
+        db_session.commit()
+        db_session.refresh(page_ref)
+
+        return json.dumps({
+            "success": True,
+            "action": "created",
+            "page_reference": page_ref.to_dict(),
+            "message": f"Created binding for page '{page_identifier}' to session {session_id}"
+        }, indent=2)
+
+    finally:
+        db_session.close()
+
+
+@mcp.tool()
+def component_ref_upload_for_page(
+    page_identifier: Annotated[str, Field(description="Page route/identifier (e.g., '/dashboard')")],
+    source_type: Annotated[str, Field(description="Source type: 'v0', 'shadcn', or 'custom'")] = "custom",
+    source_url: Annotated[str, Field(description="Original URL if available")] = "",
+    display_name: Annotated[str, Field(description="Human-readable name for the page")] = "",
+    match_keywords: Annotated[str, Field(description="JSON array of keywords for auto-matching")] = "[]",
+) -> str:
+    """Start a new component reference session for a specific page.
+
+    Creates a new ComponentReferenceSession and automatically binds it
+    to the specified page. Use component_ref_add_components to add files.
+
+    This is a convenience tool that combines:
+    1. component_ref_start_session
+    2. component_ref_create_page_binding
+
+    Args:
+        page_identifier: The page route (e.g., '/dashboard')
+        source_type: Source of components ('v0', 'shadcn', 'custom')
+        source_url: Original URL if available
+        display_name: Human-readable name for the page
+        match_keywords: JSON array of keywords for auto-matching
+
+    Returns:
+        JSON with session and page reference details.
+    """
+    project_name = PROJECT_DIR.name
+
+    db_session = get_session()
+    try:
+        # Parse keywords
+        try:
+            keywords = json.loads(match_keywords) if match_keywords else []
+            if not isinstance(keywords, list):
+                keywords = []
+        except json.JSONDecodeError:
+            keywords = []
+
+        # Create new session
+        session = ComponentReferenceSession(
+            project_name=project_name,
+            status="uploading",
+            source_type=source_type,
+            source_url=source_url if source_url else None,
+            components=[],
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        db_session.add(session)
+        db_session.flush()  # Get session.id
+
+        # Check for existing page reference
+        existing_ref = (
+            db_session.query(PageReference)
+            .filter(
+                PageReference.project_name == project_name,
+                PageReference.page_identifier == page_identifier,
+            )
+            .first()
+        )
+
+        if existing_ref:
+            # Update existing reference to point to new session
+            existing_ref.reference_session_id = session.id
+            existing_ref.display_name = display_name or existing_ref.display_name
+            existing_ref.match_keywords = keywords if keywords else existing_ref.match_keywords
+            existing_ref.updated_at = datetime.utcnow()
+            page_ref = existing_ref
+        else:
+            # Create new page reference
+            page_ref = PageReference(
+                project_name=project_name,
+                page_type="page",
+                page_identifier=page_identifier,
+                reference_session_id=session.id,
+                display_name=display_name or page_identifier.strip("/").replace("/", " ").title() + " Page",
+                match_keywords=keywords,
+                auto_match_enabled=True,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+            db_session.add(page_ref)
+
+        db_session.commit()
+        db_session.refresh(session)
+        db_session.refresh(page_ref)
+
+        return json.dumps({
+            "success": True,
+            "session_id": session.id,
+            "session_status": session.status,
+            "page_reference": page_ref.to_dict(),
+            "message": f"Created session {session.id} for page '{page_identifier}'. Add components with component_ref_add_components."
+        }, indent=2)
+
+    finally:
+        db_session.close()
+
+
+@mcp.tool()
+def component_ref_link_feature_to_page(
+    feature_id: Annotated[int, Field(description="ID of the feature to link")],
+    page_reference_id: Annotated[int, Field(description="ID of the PageReference to link to")],
+) -> str:
+    """Link a feature directly to a specific page reference.
+
+    Sets the feature's page_reference_id, which takes priority over
+    auto-matching when determining which reference to use.
+
+    Args:
+        feature_id: The feature to link
+        page_reference_id: The page reference to link to
+
+    Returns:
+        JSON with success status.
+    """
+    db_session = get_session()
+    try:
+        feature = db_session.query(Feature).filter(Feature.id == feature_id).first()
+        if not feature:
+            return json.dumps({
+                "error": f"Feature {feature_id} not found."
+            })
+
+        ref = db_session.query(PageReference).filter(
+            PageReference.id == page_reference_id
+        ).first()
+        if not ref:
+            return json.dumps({
+                "error": f"PageReference {page_reference_id} not found."
+            })
+
+        feature.page_reference_id = page_reference_id
+        db_session.commit()
+
+        return json.dumps({
+            "success": True,
+            "feature_id": feature_id,
+            "feature_name": feature.name,
+            "page_reference_id": page_reference_id,
+            "page_identifier": ref.page_identifier,
+            "message": f"Feature '{feature.name}' linked to page '{ref.page_identifier}'"
         })
 
     finally:

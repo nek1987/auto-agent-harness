@@ -50,7 +50,10 @@ class Feature(Base):
     assigned_skills = Column(JSON, nullable=True)  # List of skill names, e.g., ["senior-backend", "api-designer"]
 
     # Component Reference: link to a ComponentReferenceSession for using code references
-    reference_session_id = Column(Integer, nullable=True, index=True)
+    reference_session_id = Column(Integer, nullable=True, index=True)  # Legacy - direct session link
+
+    # Page Reference: link to a specific page reference for auto-matching
+    page_reference_id = Column(Integer, ForeignKey("page_references.id"), nullable=True, index=True)
 
     def to_dict(self) -> dict:
         """Convert feature to dictionary for JSON serialization."""
@@ -71,6 +74,7 @@ class Feature(Base):
             "arch_layer": self.arch_layer,
             "assigned_skills": self.assigned_skills,
             "reference_session_id": self.reference_session_id,
+            "page_reference_id": self.page_reference_id,
         }
 
 
@@ -261,6 +265,9 @@ class ComponentReferenceSession(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Relationship to page references
+    page_references = relationship("PageReference", back_populates="reference_session", cascade="all, delete-orphan")
+
     def to_dict(self) -> dict:
         """Convert session to dictionary for JSON serialization."""
         return {
@@ -277,6 +284,133 @@ class ComponentReferenceSession(Base):
             "error_message": self.error_message,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class PageReference(Base):
+    """
+    Page Reference - links a specific page/route to a ComponentReferenceSession.
+
+    Allows multiple reference sessions per project, each tied to a specific
+    page (e.g., /dashboard, /login, /settings).
+    """
+
+    __tablename__ = "page_references"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_name = Column(String(100), nullable=False, index=True)
+
+    # Page identification
+    page_type = Column(
+        String(20),
+        nullable=False,
+        default="page",
+        comment="page, component, layout, section"
+    )
+    page_identifier = Column(String(255), nullable=False)  # "/dashboard", "/login", "Sidebar"
+    route_pattern = Column(String(255), nullable=True)  # Regex pattern for matching
+
+    # Link to ComponentReferenceSession
+    reference_session_id = Column(
+        Integer,
+        ForeignKey("component_reference_sessions.id"),
+        nullable=False,
+        index=True
+    )
+
+    # Metadata
+    display_name = Column(String(100), nullable=True)  # "Dashboard Page"
+    description = Column(Text, nullable=True)
+    priority = Column(Integer, default=0)  # For sorting when selecting
+
+    # Auto-matching settings
+    auto_match_enabled = Column(Boolean, default=True)
+    match_keywords = Column(JSON, nullable=True)  # ["dashboard", "analytics", "stats"]
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    reference_session = relationship("ComponentReferenceSession", back_populates="page_references")
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "project_name": self.project_name,
+            "page_type": self.page_type,
+            "page_identifier": self.page_identifier,
+            "route_pattern": self.route_pattern,
+            "reference_session_id": self.reference_session_id,
+            "display_name": self.display_name,
+            "description": self.description,
+            "priority": self.priority,
+            "auto_match_enabled": self.auto_match_enabled,
+            "match_keywords": self.match_keywords,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ProjectPageStructure(Base):
+    """
+    Cache of detected pages and components in a project.
+
+    Populated when scanning a project to identify its page structure.
+    Used to suggest which pages need reference uploads.
+    """
+
+    __tablename__ = "project_page_structures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_name = Column(String(100), nullable=False, index=True)
+
+    # Detected element info
+    element_type = Column(
+        String(20),
+        nullable=False,
+        comment="page, layout, component"
+    )
+    file_path = Column(String(500), nullable=False)  # Relative path
+    route = Column(String(255), nullable=True)  # Computed route (for pages)
+    element_name = Column(String(100), nullable=False)  # Component/page name
+
+    # Detected framework and routing pattern
+    framework_type = Column(
+        String(50),
+        nullable=True,
+        comment="nextjs-pages, nextjs-app, react-router, vue-router, remix"
+    )
+
+    # Link to PageReference if one exists
+    page_reference_id = Column(
+        Integer,
+        ForeignKey("page_references.id"),
+        nullable=True,
+        index=True
+    )
+
+    # Scan metadata
+    last_scanned_at = Column(DateTime, default=datetime.utcnow)
+    file_modified_at = Column(DateTime, nullable=True)
+
+    # Relationship
+    page_reference = relationship("PageReference")
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "project_name": self.project_name,
+            "element_type": self.element_type,
+            "file_path": self.file_path,
+            "route": self.route,
+            "element_name": self.element_name,
+            "framework_type": self.framework_type,
+            "page_reference_id": self.page_reference_id,
+            "has_reference": self.page_reference_id is not None,
+            "last_scanned_at": self.last_scanned_at.isoformat() if self.last_scanned_at else None,
         }
 
 
@@ -353,6 +487,55 @@ def _migrate_database(engine) -> None:
             # Create index for better query performance
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_reference_session_id ON features(reference_session_id)"))
             conn.commit()
+
+        # Migration 10: Add page_reference_id column for Multi-Page Reference system
+        if "page_reference_id" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN page_reference_id INTEGER"))
+            conn.commit()
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_page_reference_id ON features(page_reference_id)"))
+            conn.commit()
+
+        # Migration 11: Create page_references table
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS page_references (
+                id INTEGER PRIMARY KEY,
+                project_name VARCHAR(100) NOT NULL,
+                page_type VARCHAR(20) NOT NULL DEFAULT 'page',
+                page_identifier VARCHAR(255) NOT NULL,
+                route_pattern VARCHAR(255),
+                reference_session_id INTEGER NOT NULL,
+                display_name VARCHAR(100),
+                description TEXT,
+                priority INTEGER DEFAULT 0,
+                auto_match_enabled BOOLEAN DEFAULT 1,
+                match_keywords JSON,
+                created_at DATETIME,
+                updated_at DATETIME,
+                FOREIGN KEY (reference_session_id) REFERENCES component_reference_sessions(id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_page_references_project_name ON page_references(project_name)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_page_references_reference_session_id ON page_references(reference_session_id)"))
+        conn.commit()
+
+        # Migration 12: Create project_page_structures table
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS project_page_structures (
+                id INTEGER PRIMARY KEY,
+                project_name VARCHAR(100) NOT NULL,
+                element_type VARCHAR(20) NOT NULL,
+                file_path VARCHAR(500) NOT NULL,
+                route VARCHAR(255),
+                element_name VARCHAR(100) NOT NULL,
+                framework_type VARCHAR(50),
+                page_reference_id INTEGER,
+                last_scanned_at DATETIME,
+                file_modified_at DATETIME,
+                FOREIGN KEY (page_reference_id) REFERENCES page_references(id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_project_page_structures_project_name ON project_page_structures(project_name)"))
+        conn.commit()
 
 
 def create_database(project_dir: Path) -> tuple:

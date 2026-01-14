@@ -116,6 +116,7 @@ REDESIGN_MCP_TOOLS = [
 
 # Component Reference MCP tools for code-based component references (v0.dev, shadcn, etc.)
 COMPONENT_REF_MCP_TOOLS = [
+    # Session management
     "mcp__component_ref__component_ref_get_status",
     "mcp__component_ref__component_ref_start_session",
     "mcp__component_ref__component_ref_add_components",
@@ -125,6 +126,13 @@ COMPONENT_REF_MCP_TOOLS = [
     "mcp__component_ref__component_ref_get_plan",
     "mcp__component_ref__component_ref_apply_to_feature",
     "mcp__component_ref__component_ref_complete",
+    # Multi-page reference tools
+    "mcp__component_ref__component_ref_scan_project",
+    "mcp__component_ref__component_ref_list_references",
+    "mcp__component_ref__component_ref_get_for_feature",
+    "mcp__component_ref__component_ref_create_page_binding",
+    "mcp__component_ref__component_ref_upload_for_page",
+    "mcp__component_ref__component_ref_link_feature_to_page",
 ]
 
 # Playwright MCP tools for browser automation

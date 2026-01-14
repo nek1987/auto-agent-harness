@@ -567,3 +567,313 @@ async def cancel_session(
         "status": "cancelled",
         "session_id": session_id,
     }
+
+
+# ============================================================================
+# Multi-Page Reference Endpoints
+# ============================================================================
+
+
+class PageReferenceRequest(BaseModel):
+    """Request to create or update a page reference."""
+    display_name: Optional[str] = None
+    match_keywords: Optional[List[str]] = None
+
+
+class LinkFeatureToPageRequest(BaseModel):
+    """Request to link a feature to a page reference."""
+    page_reference_id: int
+
+
+@router.get("/pages")
+async def scan_project_pages(
+    project_name: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Scan the project and detect all pages/routes.
+
+    Analyzes the project structure to identify:
+    - Framework routing type (Next.js, React Router, etc.)
+    - All pages with their routes
+    - Layout components
+    """
+    service = get_component_reference_service(project_name, db)
+
+    try:
+        result = await service.scan_project_pages()
+        return result
+    except Exception as e:
+        logger.error(f"Project scan failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/references")
+async def list_page_references(
+    project_name: str,
+    db: Session = Depends(get_db),
+):
+    """
+    List all page references for the project.
+
+    Returns all pages that have component reference sessions linked.
+    """
+    service = get_component_reference_service(project_name, db)
+
+    refs = await service.list_page_references(project_name)
+
+    return {
+        "total": len(refs),
+        "references": [
+            {
+                **ref.to_dict(),
+                "session_status": (
+                    db.query(ComponentReferenceSession)
+                    .filter(ComponentReferenceSession.id == ref.reference_session_id)
+                    .first()
+                ).status if ref.reference_session_id else None,
+            }
+            for ref in refs
+        ],
+    }
+
+
+@router.post("/pages/{page_identifier:path}/upload-zip")
+async def upload_zip_for_page(
+    project_name: str,
+    page_identifier: str,
+    file: UploadFile = File(...),
+    source_type: str = Form("custom"),
+    source_url: str = Form(None),
+    display_name: str = Form(None),
+    match_keywords: str = Form("[]"),
+    db: Session = Depends(get_db),
+):
+    """
+    Upload a ZIP file with component code for a specific page.
+
+    Creates a new session and page reference, then extracts components
+    from the ZIP file.
+    """
+    import json
+
+    service = get_component_reference_service(project_name, db)
+
+    # Ensure page_identifier starts with /
+    if not page_identifier.startswith("/"):
+        page_identifier = "/" + page_identifier
+
+    # Parse keywords
+    try:
+        keywords = json.loads(match_keywords) if match_keywords else []
+    except json.JSONDecodeError:
+        keywords = []
+
+    # Validate file type
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="File must be a ZIP archive")
+
+    # Read file content
+    content = await file.read()
+    if len(content) > 50 * 1024 * 1024:  # 50MB limit
+        raise HTTPException(status_code=400, detail="File too large (max 50MB)")
+
+    try:
+        # Create session and page reference
+        session, page_ref = await service.create_session_for_page(
+            project_name=project_name,
+            page_identifier=page_identifier,
+            source_type=source_type,
+            source_url=source_url,
+            display_name=display_name,
+            match_keywords=keywords if keywords else None,
+        )
+
+        # Parse ZIP file
+        session = await service.parse_zip_file(
+            session.id,
+            content,
+            filename=file.filename,
+        )
+
+        return {
+            "status": "ok",
+            "session_id": session.id,
+            "page_reference": page_ref.to_dict(),
+            "components_count": len(session.components or []),
+            "components": [
+                {
+                    "filename": c["filename"],
+                    "framework": c["framework"],
+                    "file_type": c["file_type"],
+                    "size": c["size"],
+                }
+                for c in (session.components or [])
+            ],
+        }
+    except Exception as e:
+        logger.error(f"ZIP upload for page failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/references/{page_identifier:path}/bind")
+async def bind_reference_to_page(
+    project_name: str,
+    page_identifier: str,
+    session_id: int,
+    request: PageReferenceRequest = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Bind an existing session to a page.
+
+    Creates or updates a PageReference linking the page to the session.
+    """
+    service = get_component_reference_service(project_name, db)
+
+    # Ensure page_identifier starts with /
+    if not page_identifier.startswith("/"):
+        page_identifier = "/" + page_identifier
+
+    # Verify session exists
+    session = await service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    try:
+        ref = await service.create_page_reference(
+            project_name=project_name,
+            page_identifier=page_identifier,
+            session_id=session_id,
+            display_name=request.display_name if request else None,
+            match_keywords=request.match_keywords if request else None,
+        )
+
+        return {
+            "status": "ok",
+            "page_reference": ref.to_dict(),
+        }
+    except Exception as e:
+        logger.error(f"Bind reference failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/references/{page_identifier:path}")
+async def get_page_reference(
+    project_name: str,
+    page_identifier: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Get details for a specific page reference.
+    """
+    service = get_component_reference_service(project_name, db)
+
+    # Ensure page_identifier starts with /
+    if not page_identifier.startswith("/"):
+        page_identifier = "/" + page_identifier
+
+    ref = await service.get_page_reference(project_name, page_identifier)
+    if not ref:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Page reference for '{page_identifier}' not found"
+        )
+
+    result = ref.to_dict()
+
+    # Add session info
+    if ref.reference_session_id:
+        session = await service.get_session(ref.reference_session_id)
+        if session:
+            result["session_status"] = session.status
+            result["components_count"] = len(session.components or [])
+            result["has_analysis"] = session.extracted_analysis is not None
+
+    return result
+
+
+@router.delete("/references/{page_identifier:path}")
+async def delete_page_reference(
+    project_name: str,
+    page_identifier: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Delete a page reference.
+
+    Does not delete the associated session, just the page binding.
+    """
+    service = get_component_reference_service(project_name, db)
+
+    # Ensure page_identifier starts with /
+    if not page_identifier.startswith("/"):
+        page_identifier = "/" + page_identifier
+
+    deleted = await service.delete_page_reference(project_name, page_identifier)
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Page reference for '{page_identifier}' not found"
+        )
+
+    return {"status": "deleted", "page_identifier": page_identifier}
+
+
+@router.get("/features/{feature_id}/auto-reference")
+async def get_auto_reference_for_feature(
+    project_name: str,
+    feature_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Get the auto-matched page reference for a feature.
+
+    Uses keyword matching to find the best page reference based on
+    the feature's category, name, and description.
+    """
+    service = get_component_reference_service(project_name, db)
+
+    result = await service.get_auto_reference_for_feature(project_name, feature_id)
+    if not result:
+        return {
+            "matched": False,
+            "feature_id": feature_id,
+            "message": "No matching page reference found"
+        }
+
+    return {
+        "matched": True,
+        "feature_id": feature_id,
+        **result,
+    }
+
+
+@router.post("/features/{feature_id}/link-to-page")
+async def link_feature_to_page_reference(
+    project_name: str,
+    feature_id: int,
+    request: LinkFeatureToPageRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Link a feature directly to a page reference.
+
+    Sets the feature's page_reference_id, which takes priority
+    over auto-matching.
+    """
+    service = get_component_reference_service(project_name, db)
+
+    try:
+        feature = await service.link_feature_to_page_reference(
+            feature_id,
+            request.page_reference_id,
+        )
+        return {
+            "status": "ok",
+            "feature_id": feature.id,
+            "feature_name": feature.name,
+            "page_reference_id": request.page_reference_id,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

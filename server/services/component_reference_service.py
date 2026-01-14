@@ -29,7 +29,13 @@ from sqlalchemy.orm import Session
 # Add parent directories to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from api.database import ComponentReferenceSession, Feature
+from api.database import (
+    ComponentReferenceSession,
+    Feature,
+    PageReference,
+    ProjectPageStructure,
+)
+from lib.page_detector import PageDetector, match_feature_to_page_reference
 
 logger = logging.getLogger(__name__)
 
@@ -568,4 +574,365 @@ class ComponentReferenceService:
         self.db.commit()
 
         logger.info(f"Cancelled component reference session {session_id}")
+        return True
+
+    # ========================================================================
+    # Multi-Page Reference Methods
+    # ========================================================================
+
+    async def scan_project_pages(self) -> dict:
+        """
+        Scan the project and detect all pages/routes.
+
+        Returns:
+            Dict with detected pages, layouts, and framework info
+        """
+        detector = PageDetector()
+        result = detector.scan(self.project_dir)
+
+        return {
+            "framework_type": result.framework_type,
+            "pages": [p.to_dict() for p in result.pages],
+            "layouts": [l.to_dict() for l in result.layouts],
+            "total_pages": len(result.pages),
+            "total_layouts": len(result.layouts),
+        }
+
+    async def cache_project_pages(self, project_name: str) -> list[ProjectPageStructure]:
+        """
+        Scan project pages and cache them in the database.
+
+        Args:
+            project_name: Name of the project
+
+        Returns:
+            List of cached ProjectPageStructure entries
+        """
+        # Clear existing cache for this project
+        self.db.query(ProjectPageStructure).filter(
+            ProjectPageStructure.project_name == project_name
+        ).delete()
+
+        # Scan project
+        detector = PageDetector()
+        result = detector.scan(self.project_dir)
+
+        cached = []
+        for page in result.pages + result.layouts:
+            entry = ProjectPageStructure(
+                project_name=project_name,
+                element_type=page.element_type,
+                file_path=page.file_path,
+                route=page.route,
+                element_name=page.element_name,
+                framework_type=page.framework_type,
+                last_scanned_at=datetime.utcnow(),
+            )
+            self.db.add(entry)
+            cached.append(entry)
+
+        self.db.commit()
+        logger.info(f"Cached {len(cached)} pages for project {project_name}")
+        return cached
+
+    async def list_page_references(self, project_name: str) -> list[PageReference]:
+        """
+        List all page references for a project.
+
+        Args:
+            project_name: Name of the project
+
+        Returns:
+            List of PageReference instances
+        """
+        return (
+            self.db.query(PageReference)
+            .filter(PageReference.project_name == project_name)
+            .order_by(PageReference.page_identifier)
+            .all()
+        )
+
+    async def get_page_reference(
+        self,
+        project_name: str,
+        page_identifier: str,
+    ) -> Optional[PageReference]:
+        """
+        Get a specific page reference.
+
+        Args:
+            project_name: Name of the project
+            page_identifier: The page route/identifier
+
+        Returns:
+            PageReference if found, None otherwise
+        """
+        return (
+            self.db.query(PageReference)
+            .filter(
+                PageReference.project_name == project_name,
+                PageReference.page_identifier == page_identifier,
+            )
+            .first()
+        )
+
+    async def create_page_reference(
+        self,
+        project_name: str,
+        page_identifier: str,
+        session_id: int,
+        display_name: Optional[str] = None,
+        match_keywords: Optional[list[str]] = None,
+        page_type: str = "page",
+    ) -> PageReference:
+        """
+        Create a new page reference linking a page to a session.
+
+        Args:
+            project_name: Name of the project
+            page_identifier: The page route (e.g., '/dashboard')
+            session_id: ID of the ComponentReferenceSession
+            display_name: Human-readable name
+            match_keywords: Keywords for auto-matching
+            page_type: Type of page element
+
+        Returns:
+            Created PageReference
+        """
+        # Check if reference already exists
+        existing = await self.get_page_reference(project_name, page_identifier)
+        if existing:
+            # Update existing reference
+            existing.reference_session_id = session_id
+            if display_name:
+                existing.display_name = display_name
+            if match_keywords:
+                existing.match_keywords = match_keywords
+            existing.updated_at = datetime.utcnow()
+            self.db.commit()
+            self.db.refresh(existing)
+            logger.info(f"Updated page reference for {page_identifier}")
+            return existing
+
+        # Create new reference
+        ref = PageReference(
+            project_name=project_name,
+            page_type=page_type,
+            page_identifier=page_identifier,
+            reference_session_id=session_id,
+            display_name=display_name or page_identifier.strip("/").replace("/", " ").title() + " Page",
+            match_keywords=match_keywords or [],
+            auto_match_enabled=True,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        self.db.add(ref)
+        self.db.commit()
+        self.db.refresh(ref)
+
+        logger.info(f"Created page reference for {page_identifier} linked to session {session_id}")
+        return ref
+
+    async def create_session_for_page(
+        self,
+        project_name: str,
+        page_identifier: str,
+        source_type: str = "custom",
+        source_url: Optional[str] = None,
+        display_name: Optional[str] = None,
+        match_keywords: Optional[list[str]] = None,
+    ) -> tuple[ComponentReferenceSession, PageReference]:
+        """
+        Create a new session and page reference in one operation.
+
+        Args:
+            project_name: Name of the project
+            page_identifier: The page route (e.g., '/dashboard')
+            source_type: Source type ('v0', 'shadcn', 'custom')
+            source_url: Original URL if available
+            display_name: Human-readable name
+            match_keywords: Keywords for auto-matching
+
+        Returns:
+            Tuple of (session, page_reference)
+        """
+        # Create session
+        session = ComponentReferenceSession(
+            project_name=project_name,
+            status="uploading",
+            source_type=source_type,
+            source_url=source_url,
+            components=[],
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        self.db.add(session)
+        self.db.flush()  # Get session.id
+
+        # Create page reference
+        ref = await self.create_page_reference(
+            project_name=project_name,
+            page_identifier=page_identifier,
+            session_id=session.id,
+            display_name=display_name,
+            match_keywords=match_keywords,
+        )
+
+        self.db.commit()
+        self.db.refresh(session)
+
+        logger.info(f"Created session {session.id} and page reference for {page_identifier}")
+        return session, ref
+
+    async def get_auto_reference_for_feature(
+        self,
+        project_name: str,
+        feature_id: int,
+    ) -> Optional[dict]:
+        """
+        Get the best matching page reference for a feature using auto-matching.
+
+        Priority:
+        1. Direct page_reference_id link on feature
+        2. Auto-match based on category/name/description
+
+        Args:
+            project_name: Name of the project
+            feature_id: ID of the feature
+
+        Returns:
+            Dict with reference data and analysis, or None
+        """
+        feature = self.db.query(Feature).filter(Feature.id == feature_id).first()
+        if not feature:
+            return None
+
+        # 1. Check direct page_reference_id link
+        if feature.page_reference_id:
+            ref = self.db.query(PageReference).filter(
+                PageReference.id == feature.page_reference_id
+            ).first()
+            if ref:
+                result = {
+                    "match_type": "direct_link",
+                    "page_reference": ref.to_dict(),
+                }
+
+                # Add session analysis if available
+                if ref.reference_session_id:
+                    session = self.db.query(ComponentReferenceSession).filter(
+                        ComponentReferenceSession.id == ref.reference_session_id
+                    ).first()
+                    if session:
+                        result["analysis"] = session.extracted_analysis
+                        result["plan"] = session.generation_plan
+                        result["target_framework"] = session.target_framework
+
+                return result
+
+        # 2. Auto-match based on feature content
+        refs = (
+            self.db.query(PageReference)
+            .filter(
+                PageReference.project_name == project_name,
+                PageReference.auto_match_enabled == True,
+            )
+            .all()
+        )
+
+        if not refs:
+            return None
+
+        ref_dicts = [r.to_dict() for r in refs]
+        matched = match_feature_to_page_reference(
+            feature.category or "",
+            feature.name or "",
+            feature.description or "",
+            ref_dicts,
+        )
+
+        if not matched:
+            return None
+
+        result = {
+            "match_type": "auto_matched",
+            "page_reference": matched,
+        }
+
+        # Get session data for the matched reference
+        ref = self.db.query(PageReference).filter(
+            PageReference.id == matched["id"]
+        ).first()
+
+        if ref and ref.reference_session_id:
+            session = self.db.query(ComponentReferenceSession).filter(
+                ComponentReferenceSession.id == ref.reference_session_id
+            ).first()
+            if session:
+                result["analysis"] = session.extracted_analysis
+                result["plan"] = session.generation_plan
+                result["target_framework"] = session.target_framework
+
+        return result
+
+    async def link_feature_to_page_reference(
+        self,
+        feature_id: int,
+        page_reference_id: int,
+    ) -> Feature:
+        """
+        Link a feature directly to a page reference.
+
+        Args:
+            feature_id: ID of the feature
+            page_reference_id: ID of the page reference
+
+        Returns:
+            Updated feature
+        """
+        feature = self.db.query(Feature).filter(Feature.id == feature_id).first()
+        if not feature:
+            raise ValueError(f"Feature {feature_id} not found")
+
+        ref = self.db.query(PageReference).filter(
+            PageReference.id == page_reference_id
+        ).first()
+        if not ref:
+            raise ValueError(f"PageReference {page_reference_id} not found")
+
+        feature.page_reference_id = page_reference_id
+        self.db.commit()
+        self.db.refresh(feature)
+
+        logger.info(f"Linked feature {feature_id} to page reference {page_reference_id}")
+        return feature
+
+    async def delete_page_reference(
+        self,
+        project_name: str,
+        page_identifier: str,
+    ) -> bool:
+        """
+        Delete a page reference.
+
+        Args:
+            project_name: Name of the project
+            page_identifier: The page route/identifier
+
+        Returns:
+            True if deleted, False if not found
+        """
+        ref = await self.get_page_reference(project_name, page_identifier)
+        if not ref:
+            return False
+
+        # Clear feature links
+        self.db.query(Feature).filter(
+            Feature.page_reference_id == ref.id
+        ).update({"page_reference_id": None})
+
+        self.db.delete(ref)
+        self.db.commit()
+
+        logger.info(f"Deleted page reference for {page_identifier}")
         return True
