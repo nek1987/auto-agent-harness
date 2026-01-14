@@ -5,6 +5,35 @@ This is a FRESH context window - you have no memory of previous sessions.
 
 {{SKILLS_CONTEXT}}
 
+### STEP 0: CHECK FOR REDESIGN WORK (MANDATORY - BEFORE ANYTHING!)
+
+**CRITICAL**: Redesign takes priority over ALL other work. Check for pending redesign FIRST:
+
+```
+Use the redesign_get_next tool
+```
+
+**If type="redesign_ready"**: You MUST complete the redesign session before ANY feature work.
+
+Based on the session status:
+- **"approving"**: User approved phases - you need to apply the changes
+- **"implementing"**: Continue applying approved changes
+
+For "approving" or "implementing" status:
+1. Get design tokens: `redesign_get_tokens`
+2. Get change plan: `redesign_get_plan`
+3. For each phase in the plan:
+   - Check approval: `redesign_check_approval` with the phase name
+   - If approved: Get changes via `redesign_apply_changes` with phase name
+   - Apply file edits using the Edit tool
+4. When all phases are complete: `redesign_complete_session`
+
+**If type="none"**: Proceed to STEP 1 (no redesign work pending).
+
+DO NOT SKIP THIS STEP. Redesign work is highest priority, like bugs.
+
+---
+
 ### STEP 1: GET YOUR BEARINGS (MANDATORY)
 
 Start by orienting yourself:
@@ -80,36 +109,6 @@ For example, if this were a chat app, you should perform a test that logs into t
   - Buttons too close together
   - Missing hover states
   - Console errors
-
-### STEP 3.5: CHECK FOR ACTIVE REDESIGN SESSION
-
-Before implementing features, check if a frontend redesign is in progress:
-
-```
-Use the redesign_get_status tool to check for active redesign session
-```
-
-If the status is "approving" or "implementing":
-
-1. **Get the change plan**: Use `redesign_get_plan` to see implementation phases
-2. **Get design tokens**: Use `redesign_get_tokens` to see extracted colors, typography, spacing
-3. **For each phase in the plan**:
-   a. Check if approved via `redesign_check_approval` with the phase name
-   b. If approved, get file changes via `redesign_apply_changes` with the phase name
-   c. Apply the file changes using Edit tool
-   d. Optionally take verification screenshot
-4. **After all phases complete**: Call `redesign_complete_session`
-
-**Available redesign tools:**
-- `redesign_get_status` - Check session state (collecting, extracting, planning, approving, implementing, complete)
-- `redesign_get_plan` - Get change plan with phases and files to modify
-- `redesign_get_tokens` - Get extracted design tokens (colors, typography, spacing, borders, shadows)
-- `redesign_check_approval` - Check if a specific phase is user-approved
-- `redesign_apply_changes` - Get specific file changes for an approved phase
-- `redesign_take_screenshot` - Capture screenshots for verification
-- `redesign_complete_session` - Mark session complete when all phases are done
-
-If no active redesign session exists (status is null or "complete"), proceed to feature implementation.
 
 ### STEP 4: CHOOSE ONE FEATURE TO IMPLEMENT
 

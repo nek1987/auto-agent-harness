@@ -100,6 +100,7 @@ FEATURE_MCP_TOOLS = [
 
 # Redesign MCP tools for frontend redesign operations
 REDESIGN_MCP_TOOLS = [
+    "mcp__redesign__redesign_get_next",  # Priority check - call before features
     "mcp__redesign__redesign_get_status",
     "mcp__redesign__redesign_start_session",
     "mcp__redesign__redesign_add_image_reference",

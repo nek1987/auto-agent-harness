@@ -118,6 +118,65 @@ def get_active_session_sync(project_name: str) -> Optional[RedesignSession]:
 
 
 @mcp.tool()
+def redesign_get_next() -> str:
+    """Get next redesign task if one exists. Call this BEFORE feature_get_next.
+
+    This is the primary entry point for checking if redesign work is pending.
+    Returns a task-like response that tells the agent whether to process
+    redesign or proceed to features.
+
+    Returns:
+        JSON with type="none" if no redesign work, or type="redesign_ready"
+        with session details if redesign work is pending.
+    """
+    project_name = PROJECT_DIR.name
+
+    db_session = get_session()
+    try:
+        session = (
+            db_session.query(RedesignSession)
+            .filter(
+                RedesignSession.project_name == project_name,
+                RedesignSession.status != "complete",
+                RedesignSession.status != "failed",
+            )
+            .order_by(RedesignSession.created_at.desc())
+            .first()
+        )
+
+        if not session:
+            return json.dumps({
+                "type": "none",
+                "message": "No active redesign session. Proceed to feature work."
+            })
+
+        # Session exists but in early stages - user still working on it
+        if session.status in ("collecting", "extracting", "planning"):
+            return json.dumps({
+                "type": "none",
+                "status": session.status,
+                "message": f"Redesign session {session.id} is in '{session.status}' status. "
+                          "User is still preparing it. Proceed to feature work."
+            })
+
+        # Session is ready for agent work
+        return json.dumps({
+            "type": "redesign_ready",
+            "session_id": session.id,
+            "status": session.status,
+            "current_phase": session.current_phase,
+            "framework_detected": session.framework_detected,
+            "has_tokens": session.extracted_tokens is not None,
+            "has_plan": session.change_plan is not None,
+            "phases_count": len(session.change_plan.get("phases", [])) if session.change_plan else 0,
+            "message": f"Redesign session ready in '{session.status}' status. "
+                      "You MUST process this redesign BEFORE any feature work."
+        })
+    finally:
+        db_session.close()
+
+
+@mcp.tool()
 def redesign_get_status() -> str:
     """Get the status of the active redesign session.
 
