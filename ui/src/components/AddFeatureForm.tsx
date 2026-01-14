@@ -172,7 +172,7 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
         description: enhancedDescription,
         steps: allSteps.length > 0 ? allSteps : (isBug ? ['Reproduce the bug'] : []),
         priority: isBug ? 0 : (priority ? parseInt(priority, 10) : undefined),
-        item_type: itemType,
+        item_type: isBug ? 'bug' : 'feature',
       })
       onClose()
     } catch (err) {
@@ -249,7 +249,7 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
         description: description.trim(),
         steps: filteredSteps.length > 0 ? filteredSteps : (isBug ? ['Reproduce the bug'] : []),
         priority: isBug ? 0 : (priority ? parseInt(priority, 10) : undefined),
-        item_type: itemType,
+        item_type: isBug ? 'bug' : 'feature',
       })
       onClose()
     } catch (err) {
