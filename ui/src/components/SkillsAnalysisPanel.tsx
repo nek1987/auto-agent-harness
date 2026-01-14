@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { X, Loader2, ChevronRight, Check, Sparkles, ListTodo, AlertCircle } from 'lucide-react'
-import { SkillCard, type SkillMatch } from './SkillCard'
+import { SkillCard } from './SkillCard'
 import { TaskCard, type SubTask } from './TaskCard'
 import { TaskEditorModal } from './TaskEditorModal'
 import { useSkillsAnalysis } from '../hooks/useSkillsAnalysis'
