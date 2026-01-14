@@ -55,6 +55,9 @@ class Feature(Base):
     # Page Reference: link to a specific page reference for auto-matching
     page_reference_id = Column(Integer, ForeignKey("page_references.id"), nullable=True, index=True)
 
+    # Redesign Session: link to a redesign session for design token application
+    redesign_session_id = Column(Integer, ForeignKey("redesign_sessions.id"), nullable=True, index=True)
+
     def to_dict(self) -> dict:
         """Convert feature to dictionary for JSON serialization."""
         return {
@@ -75,6 +78,7 @@ class Feature(Base):
             "assigned_skills": self.assigned_skills,
             "reference_session_id": self.reference_session_id,
             "page_reference_id": self.page_reference_id,
+            "redesign_session_id": self.redesign_session_id,
         }
 
 
@@ -550,6 +554,12 @@ def _migrate_database(engine) -> None:
         if "component_session_id" not in redesign_columns:
             conn.execute(text("ALTER TABLE redesign_sessions ADD COLUMN component_session_id INTEGER"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_redesign_sessions_component_session_id ON redesign_sessions(component_session_id)"))
+            conn.commit()
+
+        # Migration 14: Add redesign_session_id to features for redesign task linking
+        if "redesign_session_id" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN redesign_session_id INTEGER"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_redesign_session_id ON features(redesign_session_id)"))
             conn.commit()
 
 

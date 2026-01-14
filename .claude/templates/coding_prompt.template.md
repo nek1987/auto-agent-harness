@@ -5,35 +5,6 @@ This is a FRESH context window - you have no memory of previous sessions.
 
 {{SKILLS_CONTEXT}}
 
-### STEP 0: CHECK FOR REDESIGN WORK (MANDATORY - BEFORE ANYTHING!)
-
-**CRITICAL**: Redesign takes priority over ALL other work. Check for pending redesign FIRST:
-
-```
-Use the redesign_get_next tool
-```
-
-**If type="redesign_ready"**: You MUST complete the redesign session before ANY feature work.
-
-Based on the session status:
-- **"approving"**: User approved phases - you need to apply the changes
-- **"implementing"**: Continue applying approved changes
-
-For "approving" or "implementing" status:
-1. Get design tokens: `redesign_get_tokens`
-2. Get change plan: `redesign_get_plan`
-3. For each phase in the plan:
-   - Check approval: `redesign_check_approval` with the phase name
-   - If approved: Get changes via `redesign_apply_changes` with phase name
-   - Apply file edits using the Edit tool
-4. When all phases are complete: `redesign_complete_session`
-
-**If type="none"**: Proceed to STEP 1 (no redesign work pending).
-
-DO NOT SKIP THIS STEP. Redesign work is highest priority, like bugs.
-
----
-
 ### STEP 1: GET YOUR BEARINGS (MANDATORY)
 
 Start by orienting yourself:
@@ -125,14 +96,40 @@ Features are **test cases** that drive development. This is test-driven developm
 - WRONG: "Flashcard page doesn't exist yet" → skip feature
 - RIGHT: "Flashcard page doesn't exist yet" → build flashcard page → implement filter → test feature
 
-Get the next feature to implement:
+Get the next task to work on:
 
 ```
-# Get the highest-priority pending feature
+# Get the highest-priority task (redesign, bug, or feature)
 Use the feature_get_next tool
 ```
 
-Once you've retrieved the feature, **immediately mark it as in-progress**:
+**Handle the response based on type:**
+
+#### If type="redesign" - Apply Design System Changes
+
+This is a design token application task from a user-approved redesign session.
+
+1. Mark it as in-progress: `feature_mark_in_progress` with the feature_id
+2. Get design tokens: `redesign_get_tokens`
+3. Get change plan: `redesign_get_plan`
+4. For each phase in the plan:
+   - Check approval: `redesign_check_approval` with the phase name
+   - If approved: Get changes via `redesign_apply_changes` with phase name
+   - Apply file edits using the Edit tool
+5. Complete redesign: `redesign_complete_session`
+6. Mark feature as passing: `feature_mark_passing` with the feature_id
+
+#### If type="bug_analysis_needed" - Analyze Bug
+
+Analyze the bug and create fix features using `feature_create_bulk` with `parent_bug_id`.
+
+#### If type="bug_fix" - Implement Bug Fix
+
+Implement the fix for the parent bug, then mark as passing.
+
+#### If type="feature" - Implement Regular Feature
+
+Once you've retrieved a regular feature, **immediately mark it as in-progress**:
 
 ```
 # Mark feature as in-progress to prevent other sessions from working on it

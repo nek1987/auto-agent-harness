@@ -157,9 +157,10 @@ def feature_get_stats() -> str:
 
 @mcp.tool()
 def feature_get_next() -> str:
-    """Get the next item to work on, prioritizing bugs and their fixes.
+    """Get the next item to work on, prioritizing redesign, bugs, and their fixes.
 
     Priority order:
+    0. Redesign tasks (item_type='redesign') - highest priority, apply design tokens
     1. Open bugs (item_type='bug', bug_status='open') - need analysis
     2. Bug fix features (parent_bug_id is set) - derived from bug analysis
     3. Regular features - ordered by arch_layer FIRST, then priority
@@ -174,13 +175,42 @@ def feature_get_next() -> str:
 
     Returns:
         JSON with:
-        - type: 'bug_analysis_needed' | 'bug_fix' | 'feature' | 'all_done'
+        - type: 'redesign' | 'bug_analysis_needed' | 'bug_fix' | 'feature' | 'all_done'
+        - For redesign: session_id and instructions to apply design tokens
         - For bugs: instruction to analyze and create fix features
         - For features: standard feature details with arch_layer info
     """
     session = get_session()
     try:
-        # 1. First check for open bugs that need analysis
+        # 0. First check for redesign tasks (highest priority - design system changes)
+        redesign_task = (
+            session.query(Feature)
+            .filter(
+                Feature.item_type == "redesign",
+                Feature.passes == False,
+                Feature.in_progress == False,
+            )
+            .order_by(Feature.priority.asc(), Feature.id.asc())
+            .first()
+        )
+
+        if redesign_task:
+            return json.dumps({
+                "type": "redesign",
+                "feature": redesign_task.to_dict(),
+                "redesign_session_id": redesign_task.redesign_session_id,
+                "instruction": (
+                    "Apply design tokens from the redesign session. Steps:\n"
+                    "1. Mark this feature as in_progress using feature_mark_in_progress\n"
+                    "2. Get design tokens: redesign_get_tokens\n"
+                    "3. Get change plan: redesign_get_plan\n"
+                    "4. For each approved phase, apply file changes using Edit tool\n"
+                    "5. Complete redesign: redesign_complete_session\n"
+                    "6. Mark this feature as passing: feature_mark_passing"
+                )
+            }, indent=2)
+
+        # 1. Then check for open bugs that need analysis
         bug = (
             session.query(Feature)
             .filter(

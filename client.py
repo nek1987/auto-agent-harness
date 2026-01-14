@@ -99,8 +99,9 @@ FEATURE_MCP_TOOLS = [
 ]
 
 # Redesign MCP tools for frontend redesign operations
+# Note: redesign tasks are now handled via Feature queue (item_type="redesign")
+# so redesign_get_next is no longer needed - agent gets redesign via feature_get_next
 REDESIGN_MCP_TOOLS = [
-    "mcp__redesign__redesign_get_next",  # Priority check - call before features
     "mcp__redesign__redesign_get_status",
     "mcp__redesign__redesign_start_session",
     "mcp__redesign__redesign_add_image_reference",

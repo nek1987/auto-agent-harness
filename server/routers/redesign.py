@@ -25,21 +25,23 @@ logger = logging.getLogger(__name__)
 # Lazy imports to avoid circular dependencies
 _create_database = None
 _RedesignSession = None
+_Feature = None
 
 
 def _get_db_classes():
     """Lazy import of database classes."""
-    global _create_database, _RedesignSession
+    global _create_database, _RedesignSession, _Feature
     if _create_database is None:
         import sys
         from pathlib import Path
         root = Path(__file__).parent.parent.parent
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
-        from api.database import RedesignSession, create_database
+        from api.database import Feature, RedesignSession, create_database
         _create_database = create_database
         _RedesignSession = RedesignSession
-    return _create_database, _RedesignSession
+        _Feature = Feature
+    return _create_database, _RedesignSession, _Feature
 
 
 @contextmanager
@@ -380,14 +382,27 @@ async def approve_phase(
 
     User must approve each phase before the agent can proceed
     with implementation.
+
+    On first approval, creates a Feature task so the agent picks up
+    the redesign work via feature_get_next().
     """
+    import json
+
     project_dir = get_project_dir(project_name)
+    _, _, Feature = _get_db_classes()
+
     with get_db_session(project_dir) as db:
         service = RedesignService(db, project_dir)
 
         session = await service.get_active_session(project_name)
         if not session:
             raise HTTPException(status_code=404, detail="No active redesign session")
+
+        # Check if this is the first approval (no existing redesign feature for this session)
+        existing_redesign_feature = db.query(Feature).filter(
+            Feature.item_type == "redesign",
+            Feature.redesign_session_id == session.id,
+        ).first()
 
         session = await service.approve_phase(
             session.id,
@@ -396,10 +411,39 @@ async def approve_phase(
             request.comment,
         )
 
+        # Create a Feature task on first approval so agent picks it up
+        feature_created = False
+        if not existing_redesign_feature:
+            redesign_feature = Feature(
+                item_type="redesign",
+                priority=-1,  # Higher than bugs (0) - redesign is top priority
+                category="design-system",
+                name=f"Apply design tokens from redesign session {session.id}",
+                description=(
+                    f"Apply extracted design tokens to the project codebase. "
+                    f"Framework: {session.framework_detected or 'unknown'}. "
+                    f"Use redesign MCP tools to get tokens, plan, and apply changes."
+                ),
+                steps=json.dumps([
+                    {"step": "Get design tokens via redesign_get_tokens tool"},
+                    {"step": "Get change plan via redesign_get_plan tool"},
+                    {"step": "For each approved phase, apply file changes using Edit tool"},
+                    {"step": "Complete session via redesign_complete_session tool"},
+                ]),
+                passes=False,
+                in_progress=False,
+                redesign_session_id=session.id,
+            )
+            db.add(redesign_feature)
+            db.commit()
+            feature_created = True
+            logger.info(f"Created redesign feature {redesign_feature.id} for session {session.id}")
+
         return {
             "status": "ok",
             "phase": request.phase,
             "session_status": session.status,
+            "feature_created": feature_created,
         }
 
 
