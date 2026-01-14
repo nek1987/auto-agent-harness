@@ -121,6 +121,26 @@ Use the feature_get_skills_context tool with feature_id=42
 
 The skills context contains best practices, patterns, and guidelines from expert skills that were assigned to this feature during planning. Apply these practices while implementing the feature.
 
+#### Load Component Reference (If Available)
+
+If the feature has a `reference_session_id`, it means a component reference session was linked to provide design patterns from external sources (e.g., v0.dev, shadcn/ui). Load the reference context:
+
+```
+# Get component reference analysis for this feature
+Use the component_ref_get_analysis tool
+```
+
+The reference context contains:
+- **Patterns**: Composition, props, and structure patterns from reference components
+- **Styling**: How to apply similar styling using project's design system
+- **Props**: Interface patterns to follow
+- **Hooks**: State management patterns
+
+**CRITICAL**: Create NEW components inspired by the reference patterns. DO NOT copy code directly. Adapt to:
+- Project's existing architecture and folder structure
+- Project's design system and styling approach
+- Project's coding conventions and TypeScript patterns
+
 Focus on completing one feature perfectly and completing its testing steps in this session before moving on to other features.
 It's ok if you only complete one feature in this session, as there will be more sessions later that continue to make progress.
 
@@ -426,6 +446,21 @@ feature_export_markdown
 # 10. Get skills context for a feature (if assigned_skills present)
 feature_get_skills_context with feature_id={id}
 ```
+
+### Component Reference Tools (for features with reference_session_id):
+
+```
+# 1. Check component reference session status
+component_ref_get_status
+
+# 2. Get analysis from reference components (patterns, styling, dependencies)
+component_ref_get_analysis
+
+# 3. Get generation plan for creating new components
+component_ref_get_plan
+```
+
+Use these tools when a feature has `reference_session_id` to access design patterns from external component references (v0.dev, shadcn/ui, etc.).
 
 ### RULES:
 

@@ -53,6 +53,7 @@ from .routers import (
     agent_router,
     assistant_chat_router,
     auth_router,
+    component_reference_router,
     feature_analyze_router,
     features_router,
     filesystem_router,
@@ -233,6 +234,7 @@ app.include_router(assistant_chat_router)
 app.include_router(feature_analyze_router)
 app.include_router(skills_analysis_router)
 app.include_router(redesign_router)
+app.include_router(component_reference_router)
 
 
 # ============================================================================

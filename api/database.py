@@ -49,6 +49,9 @@ class Feature(Base):
     # Skills Analysis: assigned skills for coding agent to use during implementation
     assigned_skills = Column(JSON, nullable=True)  # List of skill names, e.g., ["senior-backend", "api-designer"]
 
+    # Component Reference: link to a ComponentReferenceSession for using code references
+    reference_session_id = Column(Integer, nullable=True, index=True)
+
     def to_dict(self) -> dict:
         """Convert feature to dictionary for JSON serialization."""
         return {
@@ -67,6 +70,7 @@ class Feature(Base):
             "bug_status": self.bug_status,
             "arch_layer": self.arch_layer,
             "assigned_skills": self.assigned_skills,
+            "reference_session_id": self.reference_session_id,
         }
 
 
@@ -191,6 +195,91 @@ class RedesignApproval(Base):
         }
 
 
+class ComponentReferenceSession(Base):
+    """
+    Component Reference session for analyzing code components from external sources
+    (e.g., v0.dev, shadcn/ui) and using them as references for generating new components.
+
+    Unlike RedesignSession which works with visual references (images/URLs),
+    this works with actual code files to extract patterns and structures.
+    """
+
+    __tablename__ = "component_reference_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_name = Column(String(100), nullable=False, index=True)
+
+    # Session status tracking
+    status = Column(
+        String(20),
+        default="uploading",
+        index=True,
+        comment="uploading, analyzing, planning, generating, complete, failed"
+    )
+
+    # Source information
+    source_type = Column(
+        String(20),
+        nullable=False,
+        default="custom",
+        comment="v0, shadcn, custom"
+    )
+    source_url = Column(String(500), nullable=True)  # Original URL if available (e.g., v0.dev link)
+
+    # Uploaded component files
+    # [{filename, content, framework, file_type}]
+    components = Column(JSON, nullable=True)
+
+    # Extracted analysis from Claude
+    # {
+    #   patterns: [{name, description, code_example}],
+    #   styling_approach: "tailwind|css-modules|styled-components",
+    #   dependencies: ["react-icons", "framer-motion"],
+    #   structure: {props_pattern, state_pattern, hooks_used},
+    #   design_tokens: {colors, spacing, typography}
+    # }
+    extracted_analysis = Column(JSON, nullable=True)
+
+    # Generation plan for target project
+    # {
+    #   target_framework: "react-tailwind",
+    #   components_to_create: [{name, based_on, adaptations}],
+    #   files_to_create: [{path, purpose}]
+    # }
+    generation_plan = Column(JSON, nullable=True)
+
+    # Generated components output
+    generated_components = Column(JSON, nullable=True)
+
+    # Target framework detected in the project
+    target_framework = Column(String(50), nullable=True)
+
+    # Error message if failed
+    error_message = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        """Convert session to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "project_name": self.project_name,
+            "status": self.status,
+            "source_type": self.source_type,
+            "source_url": self.source_url,
+            "components": self.components,
+            "extracted_analysis": self.extracted_analysis,
+            "generation_plan": self.generation_plan,
+            "generated_components": self.generated_components,
+            "target_framework": self.target_framework,
+            "error_message": self.error_message,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 def get_database_path(project_dir: Path) -> Path:
     """Return the path to the SQLite database for a project."""
     return project_dir / "features.db"
@@ -255,6 +344,14 @@ def _migrate_database(engine) -> None:
         # Migration 8: Add assigned_skills column for skills-based feature analysis
         if "assigned_skills" not in columns:
             conn.execute(text("ALTER TABLE features ADD COLUMN assigned_skills JSON"))
+            conn.commit()
+
+        # Migration 9: Add reference_session_id column for Component Reference system
+        if "reference_session_id" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN reference_session_id INTEGER"))
+            conn.commit()
+            # Create index for better query performance
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_reference_session_id ON features(reference_session_id)"))
             conn.commit()
 
 

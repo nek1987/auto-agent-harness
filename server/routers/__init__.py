@@ -16,6 +16,7 @@ from .spec_creation import router as spec_creation_router
 from .spec_import import router as spec_import_router
 from .skills_analysis import router as skills_analysis_router
 from .redesign import router as redesign_router
+from .component_reference import router as component_reference_router
 
 __all__ = [
     "auth_router",
@@ -29,4 +30,5 @@ __all__ = [
     "feature_analyze_router",
     "skills_analysis_router",
     "redesign_router",
+    "component_reference_router",
 ]

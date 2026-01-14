@@ -114,6 +114,19 @@ REDESIGN_MCP_TOOLS = [
     "mcp__redesign__redesign_get_plan",
 ]
 
+# Component Reference MCP tools for code-based component references (v0.dev, shadcn, etc.)
+COMPONENT_REF_MCP_TOOLS = [
+    "mcp__component_ref__component_ref_get_status",
+    "mcp__component_ref__component_ref_start_session",
+    "mcp__component_ref__component_ref_add_components",
+    "mcp__component_ref__component_ref_analyze",
+    "mcp__component_ref__component_ref_get_analysis",
+    "mcp__component_ref__component_ref_generate_plan",
+    "mcp__component_ref__component_ref_get_plan",
+    "mcp__component_ref__component_ref_apply_to_feature",
+    "mcp__component_ref__component_ref_complete",
+]
+
 # Playwright MCP tools for browser automation
 PLAYWRIGHT_TOOLS = [
     # Core navigation & screenshots
@@ -240,8 +253,8 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     """
     # Build allowed tools list based on mode
     # In YOLO mode, exclude Playwright tools for faster prototyping
-    # Redesign tools are always available
-    allowed_tools = [*BUILTIN_TOOLS, *FEATURE_MCP_TOOLS, *REDESIGN_MCP_TOOLS]
+    # Redesign and Component Reference tools are always available
+    allowed_tools = [*BUILTIN_TOOLS, *FEATURE_MCP_TOOLS, *REDESIGN_MCP_TOOLS, *COMPONENT_REF_MCP_TOOLS]
     if not yolo_mode:
         allowed_tools.extend(PLAYWRIGHT_TOOLS)
 
@@ -263,6 +276,8 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         *FEATURE_MCP_TOOLS,
         # Allow Redesign MCP tools for frontend redesign
         *REDESIGN_MCP_TOOLS,
+        # Allow Component Reference MCP tools for code-based references
+        *COMPONENT_REF_MCP_TOOLS,
     ]
     if not yolo_mode:
         # Allow Playwright MCP tools for browser automation (standard mode only)
@@ -292,9 +307,9 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     print(f"   - Filesystem restricted to: {project_dir.resolve()}")
     print("   - Bash commands restricted to allowlist (see security.py)")
     if yolo_mode:
-        print("   - MCP servers: features (database), redesign (styling) - YOLO MODE (no Playwright)")
+        print("   - MCP servers: features (database), redesign (styling), component_ref (code refs) - YOLO MODE (no Playwright)")
     else:
-        print("   - MCP servers: playwright (browser), features (database), redesign (styling)")
+        print("   - MCP servers: playwright (browser), features (database), redesign (styling), component_ref (code refs)")
     print("   - Project settings enabled (skills, commands, CLAUDE.md)")
     print()
 
@@ -319,6 +334,14 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         "redesign": {
             "command": sys.executable,
             "args": ["-m", "mcp_server.redesign_mcp"],
+            "env": build_safe_mcp_env({
+                "PROJECT_DIR": str(project_dir.resolve()),
+                "PYTHONPATH": str(Path(__file__).parent.resolve()),
+            }),
+        },
+        "component_ref": {
+            "command": sys.executable,
+            "args": ["-m", "mcp_server.component_reference_mcp"],
             "env": build_safe_mcp_env({
                 "PROJECT_DIR": str(project_dir.resolve()),
                 "PYTHONPATH": str(Path(__file__).parent.resolve()),
