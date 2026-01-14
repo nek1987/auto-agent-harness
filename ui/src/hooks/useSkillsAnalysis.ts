@@ -2,6 +2,11 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import type { SkillMatch } from '../components/SkillCard'
 import type { SubTask } from '../components/TaskCard'
 
+// Timeout constants (milliseconds)
+const CONNECTION_TIMEOUT = 10000  // 10 seconds
+const ANALYSIS_TIMEOUT = 120000   // 2 minutes
+const DECOMPOSITION_TIMEOUT = 180000  // 3 minutes
+
 interface FeatureData {
   name: string
   category: string
@@ -39,6 +44,15 @@ export function useSkillsAnalysis(projectName: string): UseSkillsAnalysisReturn 
   const wsRef = useRef<WebSocket | null>(null)
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const currentFeatureRef = useRef<FeatureData | null>(null)
+  const operationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Clear operation timeout
+  const clearOperationTimeout = useCallback(() => {
+    if (operationTimeoutRef.current) {
+      clearTimeout(operationTimeoutRef.current)
+      operationTimeoutRef.current = null
+    }
+  }, [])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -49,8 +63,9 @@ export function useSkillsAnalysis(projectName: string): UseSkillsAnalysisReturn 
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current)
       }
+      clearOperationTimeout()
     }
-  }, [])
+  }, [clearOperationTimeout])
 
   const clearAnalysis = useCallback(() => {
     setSkills([])
@@ -61,6 +76,8 @@ export function useSkillsAnalysis(projectName: string): UseSkillsAnalysisReturn 
     setIsLoading(false)
     currentFeatureRef.current = null
 
+    clearOperationTimeout()
+
     if (wsRef.current) {
       wsRef.current.close()
       wsRef.current = null
@@ -69,7 +86,7 @@ export function useSkillsAnalysis(projectName: string): UseSkillsAnalysisReturn 
       clearInterval(pingIntervalRef.current)
       pingIntervalRef.current = null
     }
-  }, [])
+  }, [clearOperationTimeout])
 
   const connectWebSocket = useCallback((): Promise<WebSocket> => {
     return new Promise((resolve, reject) => {
@@ -87,7 +104,19 @@ export function useSkillsAnalysis(projectName: string): UseSkillsAnalysisReturn 
         const ws = new WebSocket(wsUrl)
         wsRef.current = ws
 
+        // Connection timeout
+        const connectionTimeout = setTimeout(() => {
+          if (ws.readyState !== WebSocket.OPEN) {
+            ws.close()
+            setError('Connection timeout. Please try again.')
+            setIsLoading(false)
+            reject(new Error('Connection timeout'))
+          }
+        }, CONNECTION_TIMEOUT)
+
         ws.onopen = () => {
+          clearTimeout(connectionTimeout)
+
           // Set up ping interval
           pingIntervalRef.current = setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) {
@@ -108,6 +137,9 @@ export function useSkillsAnalysis(projectName: string): UseSkillsAnalysisReturn 
                 break
 
               case 'skills_suggested': {
+                // Clear analysis timeout on success
+                clearOperationTimeout()
+
                 // Convert server response to SkillMatch format
                 const selection = data.selection || {}
                 const allMatches: SkillMatch[] = []
@@ -214,6 +246,9 @@ export function useSkillsAnalysis(projectName: string): UseSkillsAnalysisReturn 
               }
 
               case 'decomposition_complete': {
+                // Clear decomposition timeout on success
+                clearOperationTimeout()
+
                 const result = data.result || {}
                 setDecompositionResult({
                   totalComplexity: result.total_complexity ?? result.totalComplexity ?? 0,
@@ -285,9 +320,22 @@ export function useSkillsAnalysis(projectName: string): UseSkillsAnalysisReturn 
     setIsLoading(true)
     setStatus('Connecting...')
     currentFeatureRef.current = feature
+    clearOperationTimeout()
 
     try {
       const ws = await connectWebSocket()
+
+      // Set analysis timeout
+      operationTimeoutRef.current = setTimeout(() => {
+        if (skills.length === 0) {
+          setError('Analysis timed out. The feature may be too complex. Try simplifying the description.')
+          setIsLoading(false)
+          setStatus(null)
+          if (wsRef.current) {
+            wsRef.current.close()
+          }
+        }
+      }, ANALYSIS_TIMEOUT)
 
       // Send analyze request
       ws.send(JSON.stringify({
@@ -303,10 +351,11 @@ export function useSkillsAnalysis(projectName: string): UseSkillsAnalysisReturn 
       setStatus('Analyzing feature...')
     } catch (e) {
       console.error('Failed to start analysis:', e)
+      clearOperationTimeout()
       setError('Failed to connect to analysis server')
       setIsLoading(false)
     }
-  }, [connectWebSocket])
+  }, [connectWebSocket, clearOperationTimeout, skills.length])
 
   const decompose = useCallback((selectedSkillIds: string[]) => {
     const ws = wsRef.current
@@ -326,17 +375,28 @@ export function useSkillsAnalysis(projectName: string): UseSkillsAnalysisReturn 
       return
     }
 
-    // Clear previous tasks
+    // Clear previous tasks and timeout
     setTasks([])
     setDecompositionResult(null)
     setIsLoading(true)
     setStatus('Decomposing feature...')
+    clearOperationTimeout()
+
+    // Set decomposition timeout
+    operationTimeoutRef.current = setTimeout(() => {
+      setError('Decomposition timed out. The feature may be too complex.')
+      setIsLoading(false)
+      setStatus(null)
+      if (wsRef.current) {
+        wsRef.current.close()
+      }
+    }, DECOMPOSITION_TIMEOUT)
 
     ws.send(JSON.stringify({
       type: 'decompose',
       selected_skills: selectedSkillIds,
     }))
-  }, [])
+  }, [clearOperationTimeout])
 
   return {
     skills,

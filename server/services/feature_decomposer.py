@@ -6,6 +6,7 @@ Decomposes features into subtasks using selected skills.
 Generates main tasks and extension tasks with implementation steps.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -17,6 +18,10 @@ from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+
+# Timeout and limits
+AI_DECOMPOSITION_TIMEOUT = 180  # 3 minutes for decomposition
+MAX_TURNS = 5  # Increased from 2 for complex decomposition
 
 from .skills_catalog import SkillMetadata
 
@@ -232,7 +237,7 @@ Respond with a JSON object:
                     system_prompt="You are a technical lead expert at breaking down features into implementable tasks.",
                     allowed_tools=[],
                     permission_mode="acceptEdits",
-                    max_turns=2,
+                    max_turns=MAX_TURNS,
                     cwd=str(project_dir.resolve()),
                     settings=str(settings_file.resolve()),
                 )
@@ -393,25 +398,35 @@ Respond with a JSON object:
             await self.client.query(prompt)
 
             full_response = ""
+            timed_out = False
 
-            # Stream response
-            async for msg in self.client.receive_response():
-                msg_type = type(msg).__name__
-                if msg_type == "AssistantMessage" and hasattr(msg, "content"):
-                    for block in msg.content:
-                        if hasattr(block, "text"):
-                            full_response += block.text
-                            yield {
-                                "type": "text",
-                                "content": block.text
-                            }
+            # Stream response with timeout
+            try:
+                async with asyncio.timeout(AI_DECOMPOSITION_TIMEOUT):
+                    async for msg in self.client.receive_response():
+                        msg_type = type(msg).__name__
+                        if msg_type == "AssistantMessage" and hasattr(msg, "content"):
+                            for block in msg.content:
+                                if hasattr(block, "text"):
+                                    full_response += block.text
+                                    yield {
+                                        "type": "text",
+                                        "content": block.text
+                                    }
+            except asyncio.TimeoutError:
+                timed_out = True
+                logger.warning(f"Decomposition timed out after {AI_DECOMPOSITION_TIMEOUT}s")
+                yield {
+                    "type": "warning",
+                    "content": f"Decomposition timed out after {AI_DECOMPOSITION_TIMEOUT}s. Using partial results."
+                }
 
             yield {
                 "type": "status",
                 "content": "Parsing decomposition result..."
             }
 
-            # Parse response
+            # Parse response (even if partial due to timeout)
             result = self._parse_decomposition_response(full_response)
 
             # Yield individual tasks

@@ -1,10 +1,18 @@
-import { useState, useId } from 'react'
-import { X, Plus, Trash2, Loader2, AlertCircle, Bug, Sparkles, Brain, Zap } from 'lucide-react'
+import { useState, useEffect, useId, useCallback } from 'react'
+import { X, Plus, Trash2, Loader2, AlertCircle, Bug, Sparkles, Brain, Zap, AlertTriangle } from 'lucide-react'
 import { useCreateFeature } from '../hooks/useProjects'
 import { useFeatureAnalysis } from '../hooks/useFeatureAnalysis'
 import { FeatureSuggestionsPanel, type Suggestion } from './FeatureSuggestionsPanel'
 import { SkillsAnalysisPanel } from './SkillsAnalysisPanel'
 import type { SubTask } from './TaskCard'
+
+interface ComplexityAnalysis {
+  score: number
+  level: 'simple' | 'medium' | 'complex'
+  shouldDecompose: boolean
+  reasons: string[]
+  suggestedApproach: 'direct' | 'recommend_decompose' | 'require_decompose'
+}
 
 interface Step {
   id: string
@@ -31,9 +39,71 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
   const [showSkillsPanel, setShowSkillsPanel] = useState(false)
   const [isCreatingTasks, setIsCreatingTasks] = useState(false)
 
+  // Complexity analysis state
+  const [complexityAnalysis, setComplexityAnalysis] = useState<ComplexityAnalysis | null>(null)
+  const [showComplexityWarning, setShowComplexityWarning] = useState(false)
+  const [isAnalyzingComplexity, setIsAnalyzingComplexity] = useState(false)
+
   const createFeature = useCreateFeature(projectName)
   const analysis = useFeatureAnalysis(projectName)
   const isBug = itemType === 'bug'
+
+  // Auto-analyze complexity when description or steps change significantly
+  const analyzeComplexity = useCallback(async () => {
+    if (isBug || !name.trim() || !description.trim()) {
+      setComplexityAnalysis(null)
+      setShowComplexityWarning(false)
+      return
+    }
+
+    const filteredSteps = steps.map(s => s.value.trim()).filter(s => s.length > 0)
+
+    setIsAnalyzingComplexity(true)
+    try {
+      const response = await fetch(
+        `/api/projects/${projectName}/features/analyze-complexity`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            category: category.trim() || 'uncategorized',
+            name: name.trim(),
+            description: description.trim(),
+            steps: filteredSteps,
+            item_type: 'feature',
+          }),
+        }
+      )
+
+      if (response.ok) {
+        const result: ComplexityAnalysis = await response.json()
+        setComplexityAnalysis(result)
+
+        // Auto-enable skills analysis for complex features
+        if (result.suggestedApproach === 'require_decompose') {
+          setUseSkillsAnalysis(true)
+          setShowComplexityWarning(true)
+        } else if (result.suggestedApproach === 'recommend_decompose' && !useSkillsAnalysis) {
+          setShowComplexityWarning(true)
+        } else {
+          setShowComplexityWarning(false)
+        }
+      }
+    } catch (e) {
+      console.error('Complexity analysis failed:', e)
+    } finally {
+      setIsAnalyzingComplexity(false)
+    }
+  }, [projectName, name, description, category, steps, isBug, useSkillsAnalysis])
+
+  // Debounced complexity analysis
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      analyzeComplexity()
+    }, 1000) // 1 second debounce
+
+    return () => clearTimeout(timer)
+  }, [name, description, category, steps, isBug])
 
   const handleAddStep = () => {
     setSteps([...steps, { id: `${formId}-step-${stepCounter}`, value: '' }])
@@ -160,6 +230,13 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
     e.preventDefault()
     setError(null)
 
+    // Check if complexity requires decomposition
+    if (complexityAnalysis?.suggestedApproach === 'require_decompose' && !useSkillsAnalysis) {
+      setError('This feature is too complex. Please enable Skills Analysis to decompose it into smaller tasks.')
+      setShowComplexityWarning(true)
+      return
+    }
+
     // Filter out empty steps
     const filteredSteps = getFilteredSteps()
 
@@ -174,6 +251,14 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
       })
       onClose()
     } catch (err) {
+      // Handle complexity error from backend
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      if (errorMessage.includes('complexity_requires_decomposition')) {
+        setShowComplexityWarning(true)
+        setUseSkillsAnalysis(true)
+        setError('Feature complexity requires decomposition. Skills Analysis has been enabled.')
+        return
+      }
       setError(err instanceof Error ? err.message : 'Failed to create ' + (isBug ? 'bug' : 'feature'))
     }
   }
@@ -352,6 +437,81 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
               Add Step
             </button>
           </div>
+
+          {/* Complexity Warning */}
+          {showComplexityWarning && complexityAnalysis && !isBug && (
+            <div className={`p-3 border-3 ${
+              complexityAnalysis.suggestedApproach === 'require_decompose'
+                ? 'bg-[var(--color-neo-danger)]/10 border-[var(--color-neo-danger)]'
+                : 'bg-amber-100 border-amber-500'
+            }`}>
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle size={18} className={
+                  complexityAnalysis.suggestedApproach === 'require_decompose'
+                    ? 'text-[var(--color-neo-danger)]'
+                    : 'text-amber-600'
+                } />
+                <span className="font-display font-bold text-sm uppercase">
+                  {complexityAnalysis.suggestedApproach === 'require_decompose'
+                    ? 'Complex Feature - Decomposition Required'
+                    : 'Medium Complexity - Decomposition Recommended'
+                  }
+                </span>
+                {isAnalyzingComplexity && (
+                  <Loader2 size={14} className="animate-spin ml-auto" />
+                )}
+              </div>
+              <p className="text-sm font-medium mb-1">
+                Complexity Score: {complexityAnalysis.score}/10
+              </p>
+              <ul className="text-xs space-y-0.5 text-[var(--color-neo-muted)]">
+                {complexityAnalysis.reasons.slice(0, 3).map((reason, i) => (
+                  <li key={i}>• {reason}</li>
+                ))}
+              </ul>
+              {complexityAnalysis.suggestedApproach !== 'require_decompose' && (
+                <button
+                  type="button"
+                  onClick={() => setShowComplexityWarning(false)}
+                  className="text-xs underline mt-2 text-[var(--color-neo-muted)] hover:text-[var(--color-neo-text)]"
+                >
+                  Dismiss warning
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Complexity indicator (small, non-intrusive) */}
+          {complexityAnalysis && !showComplexityWarning && !isBug && (
+            <div className="flex items-center gap-2 text-xs text-[var(--color-neo-muted)]">
+              {isAnalyzingComplexity ? (
+                <>
+                  <Loader2 size={12} className="animate-spin" />
+                  <span>Analyzing complexity...</span>
+                </>
+              ) : (
+                <>
+                  <span className={`w-2 h-2 rounded-full ${
+                    complexityAnalysis.level === 'simple' ? 'bg-green-500' :
+                    complexityAnalysis.level === 'medium' ? 'bg-amber-500' :
+                    'bg-red-500'
+                  }`} />
+                  <span>
+                    Complexity: {complexityAnalysis.level} ({complexityAnalysis.score}/10)
+                  </span>
+                  {complexityAnalysis.shouldDecompose && (
+                    <button
+                      type="button"
+                      onClick={() => setShowComplexityWarning(true)}
+                      className="underline hover:no-underline"
+                    >
+                      View details
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {/* Skills Analysis Toggle - only for features */}
           {!isBug && (

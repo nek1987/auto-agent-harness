@@ -7,10 +7,13 @@ API endpoints for feature/test case management.
 
 import logging
 import re
+import sys
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from ..schemas import (
     BugCreate,
@@ -18,6 +21,7 @@ from ..schemas import (
     FeatureListResponse,
     FeatureResponse,
 )
+from ..services.complexity_analyzer import get_complexity_analyzer
 
 # Lazy imports to avoid circular dependencies
 _create_database = None
@@ -152,9 +156,156 @@ async def list_features(project_name: str):
         raise HTTPException(status_code=500, detail="Database error occurred")
 
 
+@router.post("/analyze-complexity")
+async def analyze_feature_complexity(project_name: str, feature: FeatureCreate):
+    """
+    Analyze feature complexity and return decomposition recommendation.
+
+    This endpoint should be called BEFORE create_feature to determine
+    if the feature should be decomposed into subtasks.
+
+    Returns:
+        - score: Complexity score (1-10)
+        - level: "simple", "medium", or "complex"
+        - shouldDecompose: Whether decomposition is recommended
+        - suggestedApproach: "direct", "recommend_decompose", or "require_decompose"
+        - reasons: List of factors contributing to the complexity score
+    """
+    project_name = validate_project_name(project_name)
+    project_dir = _get_project_path(project_name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found")
+
+    analyzer = get_complexity_analyzer()
+    analysis = analyzer.analyze(
+        name=feature.name,
+        description=feature.description,
+        steps=feature.steps or [],
+        category=feature.category,
+    )
+
+    return analysis.to_dict()
+
+
+@router.post("/split-preview")
+async def preview_feature_split(project_name: str, feature: FeatureCreate):
+    """
+    Preview how a feature would be split based on step analysis.
+
+    This is a lightweight alternative to AI-based decomposition
+    for features with many steps that follow clear patterns.
+    """
+    project_name = validate_project_name(project_name)
+
+    # Import feature_splitter from lib
+    root = Path(__file__).parent.parent.parent
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+
+    from lib.feature_splitter import FeatureSplitter
+
+    splitter = FeatureSplitter()
+
+    # Get recommendation first
+    feature_dict = {
+        "name": feature.name,
+        "category": feature.category,
+        "description": feature.description,
+        "steps": feature.steps or [],
+    }
+
+    recommendation = splitter.get_split_recommendation(feature_dict)
+
+    if not recommendation["should_split"]:
+        return {
+            "shouldSplit": False,
+            "complexity": recommendation["complexity"],
+            "reason": recommendation["reason"],
+            "subFeatures": [],
+        }
+
+    # Preview the split
+    result = splitter.analyze_and_split([feature_dict], auto_split=True)
+
+    return {
+        "shouldSplit": True,
+        "complexity": recommendation["complexity"],
+        "reason": recommendation["reason"],
+        "originalStepCount": len(feature.steps) if feature.steps else 0,
+        "subFeatureCount": len(result.features),
+        "subFeatures": result.features,
+    }
+
+
+@router.post("/create-bulk")
+async def create_features_bulk(project_name: str, features: list[FeatureCreate]):
+    """
+    Create multiple features at once (for decomposed tasks).
+
+    This endpoint skips complexity checks since the features
+    are assumed to be already decomposed.
+    """
+    project_name = validate_project_name(project_name)
+    project_dir = _get_project_path(project_name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    _, Feature = _get_db_classes()
+
+    try:
+        with get_db_session(project_dir) as session:
+            # Get starting priority
+            max_priority_feature = session.query(Feature).order_by(Feature.priority.desc()).first()
+            next_priority = (max_priority_feature.priority + 1) if max_priority_feature else 1
+
+            created = []
+            for i, feature_data in enumerate(features):
+                db_feature = Feature(
+                    priority=next_priority + i,
+                    category=feature_data.category,
+                    name=feature_data.name,
+                    description=feature_data.description,
+                    steps=feature_data.steps or [],
+                    passes=False,
+                    item_type=feature_data.item_type,
+                    assigned_skills=feature_data.assigned_skills,
+                )
+                session.add(db_feature)
+                created.append(db_feature)
+
+            session.commit()
+
+            # Refresh all to get IDs
+            for f in created:
+                session.refresh(f)
+
+            return {
+                "success": True,
+                "created": len(created),
+                "features": [feature_to_response(f) for f in created],
+            }
+    except Exception:
+        logger.exception("Failed to create features in bulk")
+        raise HTTPException(status_code=500, detail="Failed to create features")
+
+
 @router.post("", response_model=FeatureResponse)
-async def create_feature(project_name: str, feature: FeatureCreate):
-    """Create a new feature/test case or bug report manually."""
+async def create_feature(
+    project_name: str,
+    feature: FeatureCreate,
+    skip_complexity_check: bool = Query(default=False, description="Skip complexity validation"),
+):
+    """
+    Create a new feature/test case or bug report manually.
+
+    By default, complex features will return a 422 error with decomposition recommendation.
+    Set skip_complexity_check=True to bypass this (for pre-decomposed tasks or known simple features).
+    """
     project_name = validate_project_name(project_name)
     project_dir = _get_project_path(project_name)
 
@@ -164,11 +315,35 @@ async def create_feature(project_name: str, feature: FeatureCreate):
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail="Project directory not found")
 
+    # Complexity gate: check if feature needs decomposition
+    # Skip for: bugs, features with assigned skills (already decomposed), explicit skip
+    is_bug = feature.item_type == "bug"
+    has_assigned_skills = feature.assigned_skills and len(feature.assigned_skills) > 0
+
+    if not skip_complexity_check and not is_bug and not has_assigned_skills:
+        analyzer = get_complexity_analyzer()
+        analysis = analyzer.analyze(
+            name=feature.name,
+            description=feature.description,
+            steps=feature.steps or [],
+            category=feature.category,
+        )
+
+        if analysis.suggested_approach == "require_decompose":
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "complexity_requires_decomposition",
+                    "message": f"Feature complexity score: {analysis.score}/10. Decomposition required.",
+                    "analysis": analysis.to_dict(),
+                    "action": "Please use Skills Analysis to decompose this feature into smaller tasks.",
+                }
+            )
+
     _, Feature = _get_db_classes()
 
     try:
         with get_db_session(project_dir) as session:
-            is_bug = feature.item_type == "bug"
 
             # Bugs always get priority 0 (highest), features get next available
             if is_bug:

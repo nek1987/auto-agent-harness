@@ -6,6 +6,7 @@ WebSocket and REST endpoints for skills-based feature analysis.
 Provides skill selection, feature decomposition, and task generation.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -13,6 +14,11 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+
+# Timeout constants (seconds)
+WEBSOCKET_SESSION_TIMEOUT = 300  # 5 minutes total session timeout
+MESSAGE_TIMEOUT = 60  # 1 minute per message timeout
+AI_OPERATION_TIMEOUT = 120  # 2 minutes for AI operations
 from pydantic import BaseModel, Field
 
 from ..services.skills_catalog import (
@@ -271,11 +277,25 @@ async def skills_analysis_websocket(websocket: WebSocket, project_name: str):
     decomposer: Optional[FeatureDecomposer] = None
     current_feature: Optional[dict] = None
     selected_skills: list[SkillMetadata] = []
+    session_start = asyncio.get_event_loop().time()
 
     try:
         while True:
+            # Check session timeout
+            elapsed = asyncio.get_event_loop().time() - session_start
+            if elapsed > WEBSOCKET_SESSION_TIMEOUT:
+                await websocket.send_json({
+                    "type": "error",
+                    "content": "Session timeout. Please restart analysis."
+                })
+                break
+
             try:
-                data = await websocket.receive_text()
+                # Add per-message timeout
+                data = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=MESSAGE_TIMEOUT
+                )
                 message = json.loads(data)
                 msg_type = message.get("type")
 
@@ -318,14 +338,33 @@ async def skills_analysis_websocket(websocket: WebSocket, project_name: str):
                     use_ai = len(description) > 100 or len(steps) > 3
 
                     if use_ai:
-                        async for chunk in selector.select_skills_with_ai(
-                            name=name,
-                            description=description,
-                            category=category,
-                            steps=steps,
-                            project_dir=project_dir,
-                        ):
-                            await websocket.send_json(chunk)
+                        try:
+                            async with asyncio.timeout(AI_OPERATION_TIMEOUT):
+                                async for chunk in selector.select_skills_with_ai(
+                                    name=name,
+                                    description=description,
+                                    category=category,
+                                    steps=steps,
+                                    project_dir=project_dir,
+                                ):
+                                    await websocket.send_json(chunk)
+                        except asyncio.TimeoutError:
+                            logger.warning(f"AI skill selection timed out after {AI_OPERATION_TIMEOUT}s")
+                            # Fall back to keyword-based selection
+                            result = selector.select_skills_for_feature(
+                                name=name,
+                                description=description,
+                                category=category,
+                                steps=steps,
+                            )
+                            await websocket.send_json({
+                                "type": "warning",
+                                "content": "AI analysis timed out. Using keyword-based selection."
+                            })
+                            await websocket.send_json({
+                                "type": "skills_suggested",
+                                "selection": result.to_dict()
+                            })
                     else:
                         # Simple keyword-based selection
                         result = selector.select_skills_for_feature(
@@ -397,14 +436,23 @@ async def skills_analysis_websocket(websocket: WebSocket, project_name: str):
                     # Create decomposer and stream results
                     decomposer = await create_decomposer(selected_skills)
 
-                    async for chunk in decomposer.decompose_stream(
-                        name=current_feature["name"],
-                        category=current_feature["category"],
-                        description=current_feature["description"],
-                        steps=current_feature["steps"],
-                        project_dir=project_dir,
-                    ):
-                        await websocket.send_json(chunk)
+                    try:
+                        # Use longer timeout for decomposition (3 minutes)
+                        async with asyncio.timeout(AI_OPERATION_TIMEOUT * 1.5):
+                            async for chunk in decomposer.decompose_stream(
+                                name=current_feature["name"],
+                                category=current_feature["category"],
+                                description=current_feature["description"],
+                                steps=current_feature["steps"],
+                                project_dir=project_dir,
+                            ):
+                                await websocket.send_json(chunk)
+                    except asyncio.TimeoutError:
+                        logger.warning("Feature decomposition timed out")
+                        await websocket.send_json({
+                            "type": "error",
+                            "content": "Decomposition timed out. Try with a simpler feature description."
+                        })
 
                 elif msg_type == "update_task":
                     # Client is updating a task locally - just acknowledge
@@ -438,6 +486,21 @@ async def skills_analysis_websocket(websocket: WebSocket, project_name: str):
                     "type": "error",
                     "content": "Invalid JSON"
                 })
+            except asyncio.TimeoutError:
+                await websocket.send_json({
+                    "type": "error",
+                    "content": "Message timeout. Please try again."
+                })
+
+    except asyncio.TimeoutError:
+        logger.warning(f"Skills analysis session timed out for {project_name}")
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "content": "Session timed out. Please restart."
+            })
+        except Exception:
+            pass
 
     except WebSocketDisconnect:
         logger.info(f"Skills analysis WebSocket disconnected for {project_name}")

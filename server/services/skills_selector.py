@@ -6,6 +6,7 @@ Selects the most relevant skills for a feature based on analysis.
 Uses keyword matching, category mapping, and AI-assisted ranking.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -16,6 +17,10 @@ from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+
+# Timeout and limits
+AI_SELECTION_TIMEOUT = 120  # 2 minutes for AI skill selection
+MAX_TURNS = 5  # Increased from 2 for complex analysis
 
 from .skills_catalog import SkillMetadata, SkillsCatalog, get_skills_catalog
 
@@ -402,7 +407,7 @@ Respond with a JSON object:
                     system_prompt="You are a skills selection expert.",
                     allowed_tools=[],
                     permission_mode="acceptEdits",
-                    max_turns=2,
+                    max_turns=MAX_TURNS,
                     cwd=str(project_dir.resolve()),
                     settings=str(settings_file.resolve()),
                 )
@@ -412,20 +417,35 @@ Respond with a JSON object:
                 await client.query(prompt)
 
                 full_response = ""
-                async for msg in client.receive_response():
-                    msg_type = type(msg).__name__
-                    if msg_type == "AssistantMessage" and hasattr(msg, "content"):
-                        for block in msg.content:
-                            if hasattr(block, "text"):
-                                full_response += block.text
+                try:
+                    async with asyncio.timeout(AI_SELECTION_TIMEOUT):
+                        async for msg in client.receive_response():
+                            msg_type = type(msg).__name__
+                            if msg_type == "AssistantMessage" and hasattr(msg, "content"):
+                                for block in msg.content:
+                                    if hasattr(block, "text"):
+                                        full_response += block.text
+                except asyncio.TimeoutError:
+                    logger.warning(f"AI selection timed out after {AI_SELECTION_TIMEOUT}s, using partial response")
+                    yield {
+                        "type": "warning",
+                        "content": "AI analysis timed out. Using partial results."
+                    }
 
-                # Parse AI response
+                # Parse AI response (even if partial)
                 ai_selection = self._parse_ai_selection(full_response, initial_selection)
 
                 yield {
                     "type": "skills_suggested",
                     "selection": ai_selection.to_dict()
                 }
+
+        except asyncio.TimeoutError:
+            logger.warning("AI selection completely timed out")
+            yield {
+                "type": "skills_suggested",
+                "selection": initial_selection.to_dict()
+            }
 
         except Exception as e:
             logger.warning(f"AI selection failed, using keyword-based: {e}")
