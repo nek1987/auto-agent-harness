@@ -88,7 +88,7 @@ class PageDetector:
             print(page.route, page.file_path)
     """
 
-    # File patterns to skip
+    # File patterns to skip (checked during directory traversal)
     SKIP_PATTERNS = [
         "__tests__",
         ".test.",
@@ -98,11 +98,82 @@ class PageDetector:
         ".nuxt",
         "dist",
         "build",
+        ".git",
+        ".cache",
+        "coverage",
+        "__pycache__",
+        ".turbo",
+        ".vercel",
+        ".svn",
+        ".hg",
     ]
+
+    # Safety limits for scanning
+    MAX_SCAN_DEPTH = 5  # Maximum directory depth to scan
+    MAX_FILES_PER_PATTERN = 100  # Stop after finding this many files
 
     def __init__(self):
         """Initialize the page detector."""
         pass
+
+    def _safe_glob(
+        self,
+        base_dir: Path,
+        pattern: str,
+        max_depth: int = None,
+    ) -> list[Path]:
+        """
+        Safely glob with depth limit and symlink protection.
+
+        Unlike Path.glob("**/..."), this:
+        - Limits recursion depth to prevent infinite traversal
+        - Skips symlinks to prevent circular references
+        - Applies skip patterns DURING traversal (not after)
+        - Limits total results to prevent memory issues
+
+        Args:
+            base_dir: Starting directory
+            pattern: File pattern to match (e.g., "page.tsx", "*.tsx")
+            max_depth: Maximum depth to recurse (default: MAX_SCAN_DEPTH)
+
+        Returns:
+            List of matching file paths
+        """
+        if max_depth is None:
+            max_depth = self.MAX_SCAN_DEPTH
+
+        results = []
+
+        def _scan(current_dir: Path, depth: int):
+            if depth > max_depth:
+                return
+            if len(results) >= self.MAX_FILES_PER_PATTERN:
+                return
+
+            try:
+                for entry in current_dir.iterdir():
+                    # Skip symlinks to prevent circular traversal
+                    if entry.is_symlink():
+                        continue
+
+                    # Check skip patterns BEFORE recursing into directories
+                    if self._should_skip(entry):
+                        continue
+
+                    if entry.is_dir():
+                        _scan(entry, depth + 1)
+                    elif entry.is_file():
+                        # Check if file matches pattern
+                        if entry.match(pattern):
+                            results.append(entry)
+                            if len(results) >= self.MAX_FILES_PER_PATTERN:
+                                return
+            except (PermissionError, OSError):
+                # Skip directories we can't access
+                pass
+
+        _scan(base_dir, 0)
+        return results
 
     def detect_framework_routing(self, project_dir: Path) -> str:
         """
@@ -133,15 +204,20 @@ class PageDetector:
         if remix_routes.exists():
             return "remix"
 
-        # Check for Vue Router (look for router config)
-        for pattern in ["**/router/**/*.ts", "**/router/**/*.js", "**/router.ts", "**/router.js"]:
-            if list(project_dir.glob(pattern)):
+        # Check for Vue Router (look for router config) - use safe glob
+        router_dir = project_dir / "src" / "router"
+        if router_dir.exists():
+            return "vue-router"
+        # Also check for router.ts/router.js in src
+        for router_file in ["router.ts", "router.js"]:
+            if (project_dir / "src" / router_file).exists():
                 return "vue-router"
 
-        # Check for React Router (look for Route imports in src)
+        # Check for React Router (look for Route imports in src) - LIMITED search
         src_dir = project_dir / "src"
         if src_dir.exists():
-            for tsx_file in src_dir.glob("**/*.tsx"):
+            # Only check a limited number of files to prevent hanging
+            for tsx_file in self._safe_glob(src_dir, "*.tsx", max_depth=2)[:20]:
                 try:
                     content = tsx_file.read_text(encoding="utf-8")
                     if "react-router" in content or "Route " in content:
@@ -191,11 +267,8 @@ class PageDetector:
             if not app_dir.exists():
                 continue
 
-            # Find all page.tsx/page.jsx files
-            for page_file in app_dir.glob("**/page.tsx"):
-                if self._should_skip(page_file):
-                    continue
-
+            # Find all page.tsx/page.jsx files using safe glob
+            for page_file in self._safe_glob(app_dir, "page.tsx"):
                 route = self._app_router_path_to_route(page_file, app_dir)
                 name = self._extract_page_name(route)
 
@@ -207,10 +280,7 @@ class PageDetector:
                     framework_type=framework_type,
                 ))
 
-            for page_file in app_dir.glob("**/page.jsx"):
-                if self._should_skip(page_file):
-                    continue
-
+            for page_file in self._safe_glob(app_dir, "page.jsx"):
                 route = self._app_router_path_to_route(page_file, app_dir)
                 name = self._extract_page_name(route)
 
@@ -222,11 +292,8 @@ class PageDetector:
                     framework_type=framework_type,
                 ))
 
-            # Find all layout.tsx files
-            for layout_file in app_dir.glob("**/layout.tsx"):
-                if self._should_skip(layout_file):
-                    continue
-
+            # Find all layout.tsx files using safe glob
+            for layout_file in self._safe_glob(app_dir, "layout.tsx"):
                 route = self._app_router_path_to_route(layout_file, app_dir)
                 name = f"Layout ({route})" if route != "/" else "Root Layout"
 
@@ -254,11 +321,8 @@ class PageDetector:
             if not pages_dir.exists():
                 continue
 
-            # Find all .tsx/.jsx files in pages
-            for page_file in pages_dir.glob("**/*.tsx"):
-                if self._should_skip(page_file):
-                    continue
-
+            # Find all .tsx/.jsx files in pages using safe glob
+            for page_file in self._safe_glob(pages_dir, "*.tsx"):
                 # Skip _app, _document, _error, api routes
                 filename = page_file.stem
                 if filename.startswith("_") or "api" in str(page_file.relative_to(pages_dir)):
@@ -275,10 +339,7 @@ class PageDetector:
                     framework_type=framework_type,
                 ))
 
-            for page_file in pages_dir.glob("**/*.jsx"):
-                if self._should_skip(page_file):
-                    continue
-
+            for page_file in self._safe_glob(pages_dir, "*.jsx"):
                 filename = page_file.stem
                 if filename.startswith("_") or "api" in str(page_file.relative_to(pages_dir)):
                     continue
@@ -304,10 +365,8 @@ class PageDetector:
         if not routes_dir.exists():
             return result
 
-        for route_file in routes_dir.glob("**/*.tsx"):
-            if self._should_skip(route_file):
-                continue
-
+        # Use safe glob for route files
+        for route_file in self._safe_glob(routes_dir, "*.tsx"):
             route = self._remix_path_to_route(route_file, routes_dir)
             name = self._extract_page_name(route)
 
@@ -329,18 +388,15 @@ class PageDetector:
         if not src_dir.exists():
             return result
 
-        # Look for router configuration files
-        router_patterns = [
-            "**/routes.tsx",
-            "**/routes.jsx",
-            "**/router.tsx",
-            "**/router.jsx",
-            "**/App.tsx",
-            "**/App.jsx",
+        # Look for router configuration files using safe glob (limited depth)
+        router_files = [
+            "routes.tsx", "routes.jsx",
+            "router.tsx", "router.jsx",
+            "App.tsx", "App.jsx",
         ]
 
-        for pattern in router_patterns:
-            for router_file in src_dir.glob(pattern):
+        for pattern in router_files:
+            for router_file in self._safe_glob(src_dir, pattern, max_depth=3):
                 try:
                     content = router_file.read_text(encoding="utf-8")
                     routes = self._extract_react_router_routes(content)
@@ -363,16 +419,31 @@ class PageDetector:
         """Scan Vue Router configuration."""
         result = PageDetectionResult(framework_type=framework_type)
 
-        # Look for router config
-        router_patterns = [
-            "**/router/**/*.ts",
-            "**/router/**/*.js",
-            "**/router.ts",
-            "**/router.js",
-        ]
+        # Check for router directory directly
+        router_dir = project_dir / "src" / "router"
+        if router_dir.exists():
+            for router_file in self._safe_glob(router_dir, "*.ts", max_depth=2):
+                try:
+                    content = router_file.read_text(encoding="utf-8")
+                    routes = self._extract_vue_router_routes(content)
 
-        for pattern in router_patterns:
-            for router_file in project_dir.glob(pattern):
+                    for route in routes:
+                        name = self._extract_page_name(route)
+                        result.pages.append(DetectedPage(
+                            element_type="page",
+                            file_path=str(router_file.relative_to(project_dir)),
+                            route=route,
+                            element_name=name,
+                            framework_type=framework_type,
+                        ))
+                except Exception as e:
+                    logger.warning(f"Error parsing {router_file}: {e}")
+
+        # Also check root src for router.ts/router.js
+        src_dir = project_dir / "src"
+        for router_filename in ["router.ts", "router.js", "index.ts", "index.js"]:
+            router_file = src_dir / router_filename
+            if router_file.exists():
                 try:
                     content = router_file.read_text(encoding="utf-8")
                     routes = self._extract_vue_router_routes(content)
@@ -404,10 +475,8 @@ class PageDetector:
             if not page_dir.exists():
                 continue
 
-            for page_file in page_dir.glob("**/*.tsx"):
-                if self._should_skip(page_file):
-                    continue
-
+            # Use safe glob instead of unbounded glob
+            for page_file in self._safe_glob(page_dir, "*.tsx"):
                 name = page_file.stem
                 route = f"/{name.lower()}" if name.lower() != "index" else "/"
 

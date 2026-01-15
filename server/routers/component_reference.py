@@ -7,6 +7,7 @@ for managing component reference sessions, ZIP uploads, analysis triggers,
 and feature linking.
 """
 
+import asyncio
 import base64
 import logging
 from contextlib import contextmanager
@@ -694,14 +695,28 @@ async def scan_project_pages(
     - Framework routing type (Next.js, React Router, etc.)
     - All pages with their routes
     - Layout components
+
+    Includes a 10-second timeout to prevent infinite scanning.
     """
     project_dir = get_project_dir(project_name)
     with get_db_session(project_dir) as db:
         service = ComponentReferenceService(db, project_dir)
 
         try:
-            result = await service.scan_project_pages()
+            # Run scan with 10 second timeout to prevent infinite loops
+            result = await asyncio.wait_for(
+                service.scan_project_pages(),
+                timeout=10.0
+            )
             return result
+        except asyncio.TimeoutError:
+            logger.warning(f"Page scan timed out for {project_name}")
+            return {
+                "pages": [],
+                "layouts": [],
+                "framework_type": "unknown",
+                "error": "Scan timed out - project may be too large or contain circular symlinks"
+            }
         except Exception as e:
             logger.error(f"Project scan failed: {e}")
             raise HTTPException(status_code=500, detail=str(e))

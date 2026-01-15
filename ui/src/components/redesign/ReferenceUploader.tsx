@@ -59,21 +59,45 @@ export function ReferenceUploader({
   const [customPageName, setCustomPageName] = useState('')
   const [uploadedPageRefs, setUploadedPageRefs] = useState<UploadedPageReference[]>([])
 
-  // Fetch detected pages when page selector is shown
+  // Fetch detected pages when page selector is shown (with timeout protection)
   useEffect(() => {
     if (showPageSelector && detectedPages.length === 0 && !isLoadingPages) {
       setIsLoadingPages(true)
-      fetch(`/api/projects/${projectName}/component-reference/pages`)
+
+      // AbortController for 15 second timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 15000)
+
+      fetch(`/api/projects/${projectName}/component-reference/pages`, {
+        signal: controller.signal
+      })
         .then(res => res.ok ? res.json() : Promise.reject(new Error('Failed to scan pages')))
         .then(data => {
+          // Handle timeout error from backend
+          if (data.error) {
+            console.warn('Page scan warning:', data.error)
+          }
           setDetectedPages([...data.pages || [], ...data.layouts || []])
         })
         .catch(err => {
-          console.error('Failed to scan project pages:', err)
+          if (err.name === 'AbortError') {
+            console.warn('Page scan timed out')
+          } else {
+            console.error('Failed to scan project pages:', err)
+          }
+          // Show empty list instead of hanging
+          setDetectedPages([])
         })
         .finally(() => {
+          clearTimeout(timeoutId)
           setIsLoadingPages(false)
         })
+
+      // Cleanup on unmount
+      return () => {
+        clearTimeout(timeoutId)
+        controller.abort()
+      }
     }
   }, [showPageSelector, projectName, detectedPages.length, isLoadingPages])
 
