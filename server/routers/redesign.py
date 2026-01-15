@@ -436,6 +436,7 @@ async def generate_plan(
     """
     import json
     from api.database import ComponentReferenceSession
+    from prompts import extract_spec_metadata, get_app_spec
     from server.services.component_reference_service import ComponentReferenceService
 
     project_dir = get_project_dir(project_name)
@@ -476,10 +477,18 @@ async def generate_plan(
                         f"components for session {session.id}"
                     )
 
+                    feature_count = None
+                    try:
+                        spec_content = get_app_spec(project_dir)
+                        _, feature_count, _ = extract_spec_metadata(spec_content)
+                    except Exception as exc:
+                        logger.info(f"Unable to read feature_count from app_spec: {exc}")
+
                     # Use AI to analyze components and generate smart features
                     comp_service = ComponentReferenceService(db, project_dir)
                     analysis = await comp_service.ai_analyze_components_for_features(
-                        component_session
+                        component_session,
+                        feature_count=feature_count,
                     )
 
                     # Create features from AI analysis

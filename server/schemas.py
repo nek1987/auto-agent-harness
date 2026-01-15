@@ -116,6 +116,7 @@ class FeatureListResponse(BaseModel):
 class AgentStartRequest(BaseModel):
     """Request schema for starting the agent."""
     yolo_mode: bool = False
+    mode: Literal["initializer", "coding", "analysis", "regression"] | None = None
 
 
 class AgentStatus(BaseModel):
@@ -124,6 +125,7 @@ class AgentStatus(BaseModel):
     pid: int | None = None
     started_at: datetime | None = None
     yolo_mode: bool = False
+    mode: str | None = None
 
 
 class AgentActionResponse(BaseModel):

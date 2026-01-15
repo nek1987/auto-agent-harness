@@ -32,6 +32,7 @@ from prompts import (
     get_coding_prompt,
     get_coding_prompt_yolo,
     get_initializer_prompt,
+    get_regression_prompt,
     load_prompt,
 )
 from lib import (
@@ -160,7 +161,7 @@ async def run_autonomous_agent(
         model: Claude model to use
         max_iterations: Maximum number of iterations (None for unlimited)
         yolo_mode: If True, skip browser testing and use YOLO prompt
-        mode: Force specific mode ("initializer", "coding", "analysis", or None for auto-detect)
+        mode: Force specific mode ("initializer", "coding", "analysis", "regression", or None for auto-detect)
         on_pause: Optional callback when auto-pause is triggered due to failures
     """
     # Initialize failure tracker with callback
@@ -177,6 +178,8 @@ async def run_autonomous_agent(
     # Determine mode
     if mode == "analysis":
         print("Mode: Analysis (scanning existing project)")
+    elif mode == "regression":
+        print("Mode: Regression (verification only)")
     elif yolo_mode:
         print("Mode: YOLO (testing disabled)")
     else:
@@ -214,8 +217,21 @@ async def run_autonomous_agent(
         print()
         is_first_run = False
         is_analysis_mode = True
+        is_regression_mode = False
+    elif mode == "regression":
+        print("=" * 70)
+        print("  REGRESSION MODE")
+        print("  Verifying previously passing features")
+        print("=" * 70)
+        print()
+        is_first_run = False
+        is_analysis_mode = False
+        is_regression_mode = True
+        if max_iterations is None:
+            max_iterations = 1
     else:
         is_analysis_mode = False
+        is_regression_mode = False
         # Check if this is a fresh start or continuation
         # Uses has_features() which checks if the database actually has features,
         # not just if the file exists (empty db should still trigger initializer)
@@ -266,6 +282,8 @@ async def run_autonomous_agent(
             # Analysis mode typically runs once - set max_iterations to 1 if not set
             if max_iterations is None:
                 max_iterations = 1
+        elif is_regression_mode:
+            prompt = get_regression_prompt(project_dir)
         elif is_first_run:
             prompt = get_initializer_prompt(project_dir)
             is_first_run = False  # Only use initializer once

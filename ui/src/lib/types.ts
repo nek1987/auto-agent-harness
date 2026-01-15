@@ -99,6 +99,7 @@ export interface AgentStatusResponse {
   pid: number | null
   started_at: string | null
   yolo_mode: boolean
+  mode?: string | null
 }
 
 export interface AgentActionResponse {
@@ -534,4 +535,20 @@ export interface UploadedPageReference {
   page_identifier: string | null
   filename: string
   components_count: number
+}
+
+export interface ComponentReferenceSession {
+  id: number
+  project_name: string
+  status: string
+  source_type: string
+  source_url: string | null
+  components: Array<Record<string, unknown>> | null
+  extracted_analysis: Record<string, unknown> | null
+  generation_plan: Record<string, unknown> | null
+  generated_components: Record<string, unknown> | null
+  target_framework: string | null
+  error_message: string | null
+  created_at: string | null
+  updated_at: string | null
 }

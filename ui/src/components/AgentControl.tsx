@@ -12,10 +12,11 @@ interface AgentControlProps {
   projectName: string
   status: AgentStatus
   yoloMode?: boolean  // From server status - whether currently running in YOLO mode
+  mode?: string | null  // From server status - optional run mode
   lastLogTimestamp?: string | null  // ISO timestamp of last log for idle detection
 }
 
-export function AgentControl({ projectName, status, yoloMode = false, lastLogTimestamp }: AgentControlProps) {
+export function AgentControl({ projectName, status, yoloMode = false, mode, lastLogTimestamp }: AgentControlProps) {
   const [yoloEnabled, setYoloEnabled] = useState(false)
   const [idleSeconds, setIdleSeconds] = useState(0)
 
@@ -48,10 +49,11 @@ export function AgentControl({ projectName, status, yoloMode = false, lastLogTim
     pauseAgent.isPending ||
     resumeAgent.isPending
 
-  const handleStart = () => startAgent.mutate(yoloEnabled)
+  const handleStart = () => startAgent.mutate({ yoloMode: yoloEnabled })
   const handleStop = () => stopAgent.mutate()
   const handlePause = () => pauseAgent.mutate()
   const handleResume = () => resumeAgent.mutate()
+  const handleRegression = () => startAgent.mutate({ mode: 'regression' })
 
   return (
     <div className="flex items-center gap-2">
@@ -79,14 +81,25 @@ export function AgentControl({ projectName, status, yoloMode = false, lastLogTim
         </div>
       )}
 
-      {/* YOLO Mode Indicator - shown when running in YOLO mode */}
-      {(status === 'running' || status === 'paused') && yoloMode && (
-        <div className="flex items-center gap-1 px-2 py-1 bg-[var(--color-neo-pending)] border-3 border-[var(--color-neo-border)]">
-          <Zap size={14} className="text-yellow-900" />
-          <span className="font-display font-bold text-xs uppercase text-yellow-900">
-            YOLO
-          </span>
-        </div>
+      {/* Mode Indicator */}
+      {(status === 'running' || status === 'paused') && (
+        <>
+          {mode === 'regression' && (
+            <div className="flex items-center gap-1 px-2 py-1 bg-[var(--color-neo-progress)] border-3 border-[var(--color-neo-border)]">
+              <span className="font-display font-bold text-xs uppercase text-white">
+                Regression
+              </span>
+            </div>
+          )}
+          {mode !== 'regression' && yoloMode && (
+            <div className="flex items-center gap-1 px-2 py-1 bg-[var(--color-neo-pending)] border-3 border-[var(--color-neo-border)]">
+              <Zap size={14} className="text-yellow-900" />
+              <span className="font-display font-bold text-xs uppercase text-yellow-900">
+                YOLO
+              </span>
+            </div>
+          )}
+        </>
       )}
 
       {/* Control Buttons */}
@@ -102,6 +115,16 @@ export function AgentControl({ projectName, status, yoloMode = false, lastLogTim
               title="YOLO Mode: Skip testing for rapid prototyping"
             >
               <Zap size={18} className={yoloEnabled ? 'text-yellow-900' : ''} />
+            </button>
+            <button
+              onClick={handleRegression}
+              disabled={isLoading}
+              className="neo-btn neo-btn-secondary text-sm py-2 px-3 min-h-[44px] min-w-[44px]"
+              title="Run Regression (verification only)"
+            >
+              <span className="font-display font-bold text-xs uppercase">
+                RG
+              </span>
             </button>
             <button
               onClick={handleStart}

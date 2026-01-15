@@ -1,10 +1,11 @@
 import { useState, useEffect, useId, useCallback } from 'react'
-import { X, Plus, Trash2, Loader2, AlertCircle, Bug, Sparkles, Brain, Zap, AlertTriangle, Palette } from 'lucide-react'
+import { X, Plus, Trash2, Loader2, AlertCircle, Bug, Sparkles, Brain, Zap, AlertTriangle, Palette, PackageOpen } from 'lucide-react'
 import { useCreateFeature } from '../hooks/useProjects'
 import { useFeatureAnalysis } from '../hooks/useFeatureAnalysis'
 import { FeatureSuggestionsPanel, type Suggestion } from './FeatureSuggestionsPanel'
 import { SkillsAnalysisPanel } from './SkillsAnalysisPanel'
 import { RedesignWizard } from './redesign'
+import { ReferenceWizard } from './reference/ReferenceWizard'
 import type { SubTask } from './TaskCard'
 
 interface ComplexityAnalysis {
@@ -27,7 +28,7 @@ interface AddFeatureFormProps {
 
 export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
   const formId = useId()
-  const [itemType, setItemType] = useState<'feature' | 'bug' | 'redesign'>('feature')
+  const [itemType, setItemType] = useState<'feature' | 'bug' | 'reference' | 'redesign'>('feature')
   const [category, setCategory] = useState('')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -48,6 +49,7 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
   const createFeature = useCreateFeature(projectName)
   const analysis = useFeatureAnalysis(projectName)
   const isBug = itemType === 'bug'
+  const isReference = itemType === 'reference'
   const isRedesign = itemType === 'redesign'
 
   // Auto-analyze complexity when description or steps change significantly
@@ -268,6 +270,20 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
   const isValid = (isBug || category.trim()) && name.trim() && description.trim()
   const canAnalyze = !isBug && name.trim() && description.trim()
 
+  // For reference mode, render the wizard inside the modal
+  if (isReference) {
+    return (
+      <div className="neo-modal-backdrop" onClick={onClose}>
+        <div
+          className="neo-modal w-full max-w-5xl max-h-[90vh] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ReferenceWizard projectName={projectName} onClose={onClose} />
+        </div>
+      </div>
+    )
+  }
+
   // For redesign mode, render the wizard inside the modal
   if (isRedesign) {
     return (
@@ -323,8 +339,8 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
             </div>
           )}
 
-          {/* Type Toggle: Feature / Bug / Redesign */}
-          <div className="flex gap-2">
+          {/* Type Toggle: Feature / Bug / Reference / Redesign */}
+          <div className="flex gap-2 flex-wrap">
             <button
               type="button"
               onClick={() => setItemType('feature')}
@@ -344,6 +360,16 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
             >
               <Bug size={18} />
               <span className="text-sm sm:text-base">Bug</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setItemType('reference')}
+              className={`neo-btn flex-1 flex items-center justify-center gap-2 min-h-[48px] ${
+                isReference ? 'neo-btn-secondary' : 'neo-btn-ghost'
+              }`}
+            >
+              <PackageOpen size={18} />
+              <span className="text-sm sm:text-base">Reference</span>
             </button>
             <button
               type="button"

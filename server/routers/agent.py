@@ -69,6 +69,7 @@ async def get_agent_status(project_name: str):
         pid=manager.pid,
         started_at=manager.started_at,
         yolo_mode=manager.yolo_mode,
+        mode=manager.mode,
     )
 
 
@@ -80,7 +81,7 @@ async def start_agent(
     """Start the agent for a project."""
     manager = get_project_manager(project_name)
 
-    success, message = await manager.start(yolo_mode=request.yolo_mode)
+    success, message = await manager.start(yolo_mode=request.yolo_mode, mode=request.mode)
 
     return AgentActionResponse(
         success=success,

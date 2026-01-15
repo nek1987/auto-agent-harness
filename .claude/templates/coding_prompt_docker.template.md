@@ -8,6 +8,10 @@ All code execution MUST happen inside Docker containers. The host system must re
 
 {{SKILLS_CONTEXT}}
 
+### DESIGN QUALITY GUARDRAIL (UI WORK ONLY)
+
+If the feature touches UI/UX, avoid generic "AI-slop" layouts. Use intentional typography, a clear visual direction, and purposeful spacing. Prefer distinctive, reference-aligned design decisions over default stacks.
+
 ---
 
 ## CRITICAL DOCKER RULES (VIOLATION = TASK FAILURE)
@@ -233,45 +237,7 @@ docker compose ps
 docker compose logs -f
 ```
 
-### STEP 3: VERIFICATION TEST (CRITICAL!)
-
-**MANDATORY BEFORE NEW WORK:**
-
-The previous session may have introduced bugs. Before implementing anything
-new, you MUST run verification tests.
-
-Run 1-2 of the features marked as passing that are most core to the app's functionality to verify they still work.
-
-To get passing features for regression testing:
-
-```
-Use the feature_get_for_regression tool (returns up to 3 random passing features)
-```
-
-**Testing workflow in Docker:**
-
-```bash
-# Run backend tests
-docker compose exec backend pytest
-
-# Check API health
-curl http://localhost:6100/api/health
-
-# Check frontend
-curl http://localhost:3000
-
-# View logs for errors
-docker compose logs backend
-docker compose logs frontend
-```
-
-**If you find ANY issues (functional or visual):**
-
-- Mark that feature as "passes": false immediately
-- Add issues to a list
-- Fix all issues BEFORE moving to new features
-
-### STEP 4: CHOOSE ONE FEATURE TO IMPLEMENT
+### STEP 3: CHOOSE ONE FEATURE TO IMPLEMENT
 
 #### TEST-DRIVEN DEVELOPMENT MINDSET (CRITICAL)
 
@@ -296,7 +262,7 @@ Once you've retrieved the feature, **immediately mark it as in-progress**:
 Use the feature_mark_in_progress tool with feature_id=42
 ```
 
-### STEP 5: IMPLEMENT THE FEATURE (DOCKER WORKFLOW)
+### STEP 4: IMPLEMENT THE FEATURE (DOCKER WORKFLOW)
 
 **Development Workflow:**
 
@@ -354,7 +320,7 @@ docker compose down
 docker compose down -v
 ```
 
-### STEP 6: VERIFY WITH BROWSER AUTOMATION
+### STEP 5: VERIFY WITH BROWSER AUTOMATION
 
 **CRITICAL:** You MUST verify features through the actual UI.
 
@@ -379,7 +345,7 @@ Use browser automation tools:
 - Skip visual verification
 - Mark tests passing without thorough verification
 
-### STEP 6.5: MANDATORY VERIFICATION CHECKLIST (BEFORE MARKING ANY TEST PASSING)
+### STEP 5.5: MANDATORY VERIFICATION CHECKLIST (BEFORE MARKING ANY TEST PASSING)
 
 **You MUST complete ALL of these checks before marking any feature as "passes": true**
 
@@ -406,7 +372,7 @@ Use browser automation tools:
 - [ ] NO unexplained data appeared (would indicate mock data)
 - [ ] Dashboard/counts reflect real numbers after my changes
 
-### STEP 7: UPDATE FEATURE STATUS (CAREFULLY!)
+### STEP 6: UPDATE FEATURE STATUS (CAREFULLY!)
 
 **YOU CAN ONLY MODIFY ONE FIELD: "passes"**
 
@@ -427,7 +393,7 @@ Use the feature_mark_passing tool with feature_id=42
 
 **ONLY MARK A FEATURE AS PASSING AFTER VERIFICATION WITH SCREENSHOTS.**
 
-### STEP 8: COMMIT YOUR PROGRESS
+### STEP 7: COMMIT YOUR PROGRESS
 
 Make a descriptive git commit:
 
@@ -442,7 +408,7 @@ git commit -m "Implement [feature name] - verified end-to-end
 "
 ```
 
-### STEP 9: UPDATE PROGRESS NOTES
+### STEP 8: UPDATE PROGRESS NOTES
 
 Update `claude-progress.txt` with:
 
@@ -453,7 +419,7 @@ Update `claude-progress.txt` with:
 - Current completion status (e.g., "45/200 tests passing")
 - Docker status (services running, any container issues)
 
-### STEP 10: END SESSION CLEANLY
+### STEP 9: END SESSION CLEANLY
 
 Before context fills up:
 
@@ -542,7 +508,7 @@ feature_get_next
 # 3. Mark a feature as in-progress (call immediately after feature_get_next)
 feature_mark_in_progress with feature_id={id}
 
-# 4. Get up to 3 random passing features for regression testing
+# 4. (Regression mode only) Get up to 3 random passing features
 feature_get_for_regression
 
 # 5. Mark a feature as passing (after verification)

@@ -5,6 +5,10 @@ This is a FRESH context window - you have no memory of previous sessions.
 
 {{SKILLS_CONTEXT}}
 
+### DESIGN QUALITY GUARDRAIL (UI WORK ONLY)
+
+If the feature touches UI/UX, avoid generic "AI-slop" layouts. Use intentional typography, a clear visual direction, and purposeful spacing. Prefer distinctive, reference-aligned design decisions over default stacks.
+
 ### STEP 1: GET YOUR BEARINGS (MANDATORY)
 
 Start by orienting yourself:
@@ -50,49 +54,7 @@ chmod +x init.sh
 
 Otherwise, start servers manually and document the process.
 
-### STEP 3: VERIFICATION TEST (CONDITIONAL)
-
-**Check if there's pending work first:**
-
-```
-Use the feature_get_stats tool
-```
-
-**Decision:**
-- If `pending > 0` OR `in_progress > 0`: Run regression tests below
-- If `pending == 0` AND `in_progress == 0`: Skip regression, go directly to STEP 4
-
-This prevents infinite regression loops when all work is complete.
-
----
-
-**If there IS pending work, run regression tests:**
-
-Run 1-2 of the features marked as passing that are most core to the app's functionality to verify they still work.
-
-To get passing features for regression testing:
-
-```
-Use the feature_get_for_regression tool (returns up to 3 random passing features)
-```
-
-For example, if this were a chat app, you should perform a test that logs into the app, sends a message, and gets a response.
-
-**If you find ANY issues (functional or visual):**
-
-- Mark that feature as "passes": false immediately
-- Add issues to a list
-- Fix all issues BEFORE moving to new features
-- This includes UI bugs like:
-  - White-on-white text or poor contrast
-  - Random characters displayed
-  - Incorrect timestamps
-  - Layout issues or overflow
-  - Buttons too close together
-  - Missing hover states
-  - Console errors
-
-### STEP 4: CHOOSE ONE FEATURE TO IMPLEMENT
+### STEP 3: CHOOSE ONE FEATURE TO IMPLEMENT
 
 #### TEST-DRIVEN DEVELOPMENT MINDSET (CRITICAL)
 
@@ -236,7 +198,7 @@ Use the feature_skip tool with feature_id={id}
 
 Document the SPECIFIC external blocker in `claude-progress.txt`. "Functionality not built" is NEVER a valid reason.
 
-### STEP 5: IMPLEMENT THE FEATURE
+### STEP 4: IMPLEMENT THE FEATURE
 
 Implement the chosen feature thoroughly:
 
@@ -245,7 +207,7 @@ Implement the chosen feature thoroughly:
 3. Fix any issues discovered
 4. Verify the feature works end-to-end
 
-### STEP 6: VERIFY WITH BROWSER AUTOMATION
+### STEP 5: VERIFY WITH BROWSER AUTOMATION
 
 **CRITICAL:** You MUST verify features through the actual UI.
 
@@ -270,7 +232,7 @@ Use browser automation tools:
 - Skip visual verification
 - Mark tests passing without thorough verification
 
-### STEP 6.5: MANDATORY VERIFICATION CHECKLIST (BEFORE MARKING ANY TEST PASSING)
+### STEP 5.5: MANDATORY VERIFICATION CHECKLIST (BEFORE MARKING ANY TEST PASSING)
 
 **You MUST complete ALL of these checks before marking any feature as "passes": true**
 
@@ -305,7 +267,7 @@ Use browser automation tools:
 - [ ] Loading states appeared during API calls
 - [ ] Error states handle failures gracefully
 
-### STEP 6.6: MOCK DATA DETECTION SWEEP
+### STEP 5.6: MOCK DATA DETECTION SWEEP
 
 **Run this sweep AFTER EVERY FEATURE before marking it as passing:**
 
@@ -348,7 +310,7 @@ For API endpoints used by this feature:
 - Verify response contains actual database data
 - Empty database = empty response (not pre-populated mock data)
 
-### STEP 7: UPDATE FEATURE STATUS (CAREFULLY!)
+### STEP 6: UPDATE FEATURE STATUS (CAREFULLY!)
 
 **YOU CAN ONLY MODIFY ONE FIELD: "passes"**
 
@@ -369,7 +331,7 @@ Use the feature_mark_passing tool with feature_id=42
 
 **ONLY MARK A FEATURE AS PASSING AFTER VERIFICATION WITH SCREENSHOTS.**
 
-### STEP 8: COMMIT YOUR PROGRESS
+### STEP 7: COMMIT YOUR PROGRESS
 
 Make a descriptive git commit:
 
@@ -384,7 +346,7 @@ git commit -m "Implement [feature name] - verified end-to-end
 "
 ```
 
-### STEP 9: UPDATE PROGRESS NOTES
+### STEP 8: UPDATE PROGRESS NOTES
 
 Update `claude-progress.txt` with:
 
@@ -394,7 +356,7 @@ Update `claude-progress.txt` with:
 - What should be worked on next
 - Current completion status (e.g., "45/200 tests passing")
 
-### STEP 9.5: CHECK PROJECT COMPLETION
+### STEP 8.5: CHECK PROJECT COMPLETION
 
 After marking a feature as passing, check if the project is complete:
 
@@ -411,7 +373,7 @@ If the response shows `"completed": true`:
 
 If `"completed": false`, continue to the next feature.
 
-### STEP 10: END SESSION CLEANLY
+### STEP 9: END SESSION CLEANLY
 
 Before context fills up:
 
@@ -488,7 +450,7 @@ feature_get_next
 # 3. Mark a feature as in-progress (call immediately after feature_get_next)
 feature_mark_in_progress with feature_id={id}
 
-# 4. Get up to 3 random passing features for regression testing
+# 4. (Regression mode only) Get up to 3 random passing features
 feature_get_for_regression
 
 # 5. Mark a feature as passing (after verification)

@@ -43,6 +43,8 @@ SKILL_CATEGORIES: dict[str, list[str]] = {
     ],
     # Coding mode - general development
     "coding": [
+        "frontend-design",
+        "frontend-aesthetics",
         "senior-fullstack",
         "senior-frontend",
         "senior-backend",
@@ -139,7 +141,7 @@ SKILL_CATEGORIES: dict[str, list[str]] = {
 }
 
 # Maximum number of skills to include in context to avoid token bloat
-MAX_SKILLS_IN_CONTEXT = 5
+MAX_SKILLS_IN_CONTEXT = 6
 
 
 class SkillsLoader:

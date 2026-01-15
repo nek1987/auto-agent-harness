@@ -6,7 +6,7 @@
  */
 
 import { useMemo } from 'react'
-import { Wrench, FileCode, Loader2 } from 'lucide-react'
+import { Wrench, FileCode, Loader2, Target } from 'lucide-react'
 import type { AgentStatus } from '../lib/types'
 
 interface ActivityPanelProps {
@@ -95,12 +95,38 @@ function formatToolName(toolName: string): string {
   return toolName
 }
 
+function getRegressionTargets(
+  logs: Array<{ line: string }>
+): Array<{ id: number; name: string }> | null {
+  for (let i = logs.length - 1; i >= 0; i--) {
+    const line = logs[i].line
+    const markerIndex = line.indexOf('REGRESSION_TARGETS:')
+    if (markerIndex === -1) continue
+
+    const payload = line.slice(markerIndex + 'REGRESSION_TARGETS:'.length).trim()
+    if (!payload) return null
+
+    try {
+      const data = JSON.parse(payload)
+      if (Array.isArray(data)) {
+        return data
+          .filter(item => item && typeof item.id === 'number' && typeof item.name === 'string')
+          .map(item => ({ id: item.id, name: item.name }))
+      }
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
 export function ActivityPanel({ logs, agentStatus }: ActivityPanelProps) {
   const currentTool = useMemo(() => getCurrentTool(logs), [logs])
   const currentFeature = useMemo(() => getCurrentFeature(logs), [logs])
+  const regressionTargets = useMemo(() => getRegressionTargets(logs), [logs])
 
   // Only show when agent is running and there's something to show
-  if (agentStatus !== 'running' || (!currentTool && !currentFeature)) {
+  if (agentStatus !== 'running' || (!currentTool && !currentFeature && !regressionTargets)) {
     return null
   }
 
@@ -148,6 +174,23 @@ export function ActivityPanel({ logs, agentStatus }: ActivityPanelProps) {
               </div>
               <div className="font-mono text-sm font-bold truncate">
                 {currentFeature.name}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Regression Targets */}
+        {regressionTargets && regressionTargets.length > 0 && (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-8 h-8 bg-[var(--color-neo-progress)] border-2 border-[var(--color-neo-border)] rounded">
+              <Target size={16} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-[var(--color-neo-text-secondary)] uppercase">
+                Regression Targets
+              </div>
+              <div className="font-mono text-sm font-bold truncate">
+                {regressionTargets.map(target => `#${target.id} ${target.name}`).join(' · ')}
               </div>
             </div>
           </div>

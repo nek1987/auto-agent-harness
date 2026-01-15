@@ -13,6 +13,7 @@ import { ProjectSelector } from './components/ProjectSelector'
 import { KanbanBoard } from './components/KanbanBoard'
 import { AgentControl } from './components/AgentControl'
 import { ProgressDashboard } from './components/ProgressDashboard'
+import { ProjectHealthPanel } from './components/ProjectHealthPanel'
 import { SetupWizard } from './components/SetupWizard'
 import { AddFeatureForm } from './components/AddFeatureForm'
 import { FeatureModal } from './components/FeatureModal'
@@ -100,7 +101,7 @@ function App() {
     // Auto-start the initializer agent
     if (selectedProject) {
       try {
-        await startAgent(selectedProject, false)
+        await startAgent(selectedProject, { yoloMode: false })
       } catch (err) {
         console.error('Failed to start agent after spec import:', err)
       }
@@ -115,7 +116,7 @@ function App() {
     // Auto-start the initializer agent
     if (selectedProject) {
       try {
-        await startAgent(selectedProject, yoloMode)
+        await startAgent(selectedProject, { yoloMode })
       } catch (err) {
         console.error('Failed to start agent after spec creation:', err)
       }
@@ -253,6 +254,7 @@ function App() {
                     projectName={selectedProject}
                     status={wsState.agentStatus}
                     yoloMode={agentStatusData?.yolo_mode ?? false}
+                    mode={agentStatusData?.mode ?? null}
                     lastLogTimestamp={wsState.logs.length > 0 ? wsState.logs[wsState.logs.length - 1].timestamp : null}
                   />
                 </>
@@ -331,6 +333,8 @@ function App() {
                 percentage={progress.percentage}
                 isConnected={wsState.isConnected}
               />
+
+              <ProjectHealthPanel projectName={selectedProject} />
 
               {/* Agent Thought - shows latest agent narrative */}
               <AgentThought

@@ -25,6 +25,7 @@ Spec Validation:
 """
 
 import json
+import logging
 import re
 import shutil
 from dataclasses import dataclass, field
@@ -39,6 +40,8 @@ TEMPLATES_DIR = Path(__file__).parent / ".claude" / "templates"
 
 # Harness directory (for loading skills from harness rather than project)
 HARNESS_DIR = Path(__file__).parent
+
+logger = logging.getLogger(__name__)
 
 
 def get_project_prompts_dir(project_dir: Path) -> Path:
@@ -230,7 +233,20 @@ def inject_feature_skills(content: str, assigned_skills: list[str] | None) -> st
 
 def get_initializer_prompt(project_dir: Path | None = None) -> str:
     """Load the initializer prompt with skills context (project-specific if available)."""
-    return load_prompt("initializer_prompt", project_dir, mode="initializer")
+    prompt = load_prompt("initializer_prompt", project_dir, mode="initializer")
+
+    if project_dir and "[FEATURE_COUNT]" in prompt:
+        try:
+            spec_content = get_app_spec(project_dir)
+            _, feature_count, _ = extract_spec_metadata(spec_content)
+            if feature_count:
+                prompt = prompt.replace("[FEATURE_COUNT]", str(feature_count))
+            else:
+                logger.warning("Initializer prompt still contains [FEATURE_COUNT] placeholder")
+        except Exception as exc:
+            logger.warning(f"Failed to auto-fill [FEATURE_COUNT] placeholder: {exc}")
+
+    return prompt
 
 
 def get_coding_prompt(project_dir: Path | None = None, use_docker: bool | None = None) -> str:
@@ -293,6 +309,11 @@ def get_coding_prompt_yolo(project_dir: Path | None = None, use_docker: bool | N
 def get_analysis_prompt(project_dir: Path | None = None) -> str:
     """Load the analysis agent prompt with skills context (project-specific if available)."""
     return load_prompt("analysis_prompt", project_dir, mode="analysis")
+
+
+def get_regression_prompt(project_dir: Path | None = None) -> str:
+    """Load the regression prompt with skills context (project-specific if available)."""
+    return load_prompt("regression_prompt", project_dir, mode="testing")
 
 
 def get_app_spec(project_dir: Path) -> str:

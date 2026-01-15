@@ -82,6 +82,11 @@ class GeneratePlanRequest(BaseModel):
     adaptation_notes: Optional[str] = None
 
 
+class GenerateFeaturesRequest(BaseModel):
+    """Request to generate features from component references."""
+    force: bool = False
+
+
 class LinkFeatureRequest(BaseModel):
     """Request to link session to a feature."""
     feature_id: int
@@ -532,6 +537,107 @@ async def generate_plan(
         except Exception as e:
             logger.error(f"Plan generation failed: {e}")
             raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/generate-features")
+async def generate_features(
+    project_name: str,
+    request: GenerateFeaturesRequest = GenerateFeaturesRequest(),
+):
+    """
+    Generate feature tasks from the active component reference session.
+
+    Uses AI analysis to suggest features and creates them in the database.
+    """
+    from prompts import extract_spec_metadata, get_app_spec
+
+    project_dir = get_project_dir(project_name)
+
+    # Lazy import to avoid circular dependencies
+    import sys
+    root = Path(__file__).parent.parent.parent
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    from api.database import Feature, PageReference
+
+    with get_db_session(project_dir) as db:
+        service = ComponentReferenceService(db, project_dir)
+        session = await service.get_active_session(project_name)
+
+        if not session:
+            raise HTTPException(status_code=404, detail="No active component reference session")
+
+        if not session.components:
+            raise HTTPException(status_code=400, detail="No components uploaded to analyze")
+
+        existing = db.query(Feature).filter(
+            Feature.reference_session_id == session.id
+        ).count()
+        if existing and not request.force:
+            return {
+                "generated": 0,
+                "existing": existing,
+                "message": "Features already generated for this session",
+            }
+
+        feature_count = None
+        try:
+            spec_content = get_app_spec(project_dir)
+            _, feature_count, _ = extract_spec_metadata(spec_content)
+        except Exception as exc:
+            logger.info(f"Unable to read feature_count from app_spec: {exc}")
+
+        analysis = await service.ai_analyze_components_for_features(
+            session,
+            feature_count=feature_count,
+        )
+
+        suggested_features = analysis.get("suggested_features", [])
+        if not suggested_features:
+            return {
+                "generated": 0,
+                "existing": existing,
+                "message": "No features suggested from component analysis",
+                "analysis_summary": analysis.get("analysis_summary", ""),
+            }
+
+        page_ref = db.query(PageReference).filter(
+            PageReference.reference_session_id == session.id
+        ).first()
+
+        max_priority_result = db.query(Feature.priority).order_by(
+            Feature.priority.desc()
+        ).first()
+        start_priority = (max_priority_result[0] + 1) if max_priority_result else 1
+
+        created = 0
+        for i, feat_data in enumerate(suggested_features):
+            feature = Feature(
+                priority=start_priority + i,
+                category=feat_data.get("category", "components"),
+                name=feat_data.get("name", f"Feature {i + 1}"),
+                description=feat_data.get("description", ""),
+                steps=feat_data.get("steps", []),
+                dependencies=feat_data.get("dependencies", []),
+                arch_layer=feat_data.get("arch_layer", 6),
+                reference_session_id=session.id,
+                page_reference_id=page_ref.id if page_ref else None,
+                item_type="feature",
+                passes=False,
+                in_progress=False,
+            )
+            db.add(feature)
+            created += 1
+
+        db.commit()
+
+        return {
+            "generated": created,
+            "existing": existing,
+            "feature_count": feature_count,
+            "target_range": analysis.get("target_range"),
+            "analysis_summary": analysis.get("analysis_summary", ""),
+        }
 
 
 @router.get("/plan")

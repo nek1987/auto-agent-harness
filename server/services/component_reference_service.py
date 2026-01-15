@@ -20,6 +20,7 @@ import logging
 import re
 import sys
 import zipfile
+from math import ceil
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -984,6 +985,7 @@ class ComponentReferenceService:
     async def ai_analyze_components_for_features(
         self,
         session: ComponentReferenceSession,
+        feature_count: Optional[int] = None,
     ) -> dict:
         """
         Use Claude to analyze all components and generate a comprehensive feature list.
@@ -1031,8 +1033,10 @@ class ComponentReferenceService:
                 "preview": preview,
             })
 
+        target_min, target_max = self._get_feature_target_range(feature_count)
+
         # Build the AI prompt
-        prompt = self._build_feature_analysis_prompt(file_summaries)
+        prompt = self._build_feature_analysis_prompt(file_summaries, target_min, target_max)
 
         try:
             # Call Claude API
@@ -1055,17 +1059,76 @@ class ComponentReferenceService:
                 response_text = response_text[json_start:json_end]
 
             result = json.loads(response_text.strip())
+            result = self._normalize_feature_suggestions(
+                result,
+                session.components,
+                target_min,
+                target_max,
+            )
             logger.info(
                 f"AI generated {len(result.get('suggested_features', []))} features "
-                f"from {len(session.components)} files"
+                f"(target {target_min}-{target_max}) from {len(session.components)} files"
             )
             return result
 
         except Exception as e:
             logger.warning(f"AI analysis failed, using fallback: {e}")
-            return self._fallback_feature_generation(session.components)
+            fallback = self._fallback_feature_generation(session.components)
+            return self._normalize_feature_suggestions(
+                fallback,
+                session.components,
+                target_min,
+                target_max,
+            )
 
-    def _build_feature_analysis_prompt(self, file_summaries: list[dict]) -> str:
+    def _get_feature_target_range(self, feature_count: Optional[int]) -> tuple[int, int]:
+        """Determine target feature range based on app feature_count."""
+        if not feature_count or feature_count <= 0:
+            return 5, 15
+
+        target_min = max(5, ceil(feature_count * 0.2))
+        target_max = max(target_min, ceil(feature_count * 0.4))
+        return target_min, target_max
+
+    def _normalize_feature_suggestions(
+        self,
+        result: dict,
+        components: list,
+        target_min: int,
+        target_max: int,
+    ) -> dict:
+        """Normalize and scale suggested features to target range."""
+        suggestions = result.get("suggested_features") or []
+        if not isinstance(suggestions, list):
+            suggestions = []
+
+        original_count = len(suggestions)
+
+        if target_max and len(suggestions) > target_max:
+            suggestions = suggestions[:target_max]
+
+        if len(suggestions) < target_min and components:
+            fallback = self._fallback_feature_generation(components).get("suggested_features", [])
+            seen_names = {f.get("name") for f in suggestions if f.get("name")}
+            for feature in fallback:
+                if len(suggestions) >= target_min:
+                    break
+                name = feature.get("name")
+                if name and name in seen_names:
+                    continue
+                suggestions.append(feature)
+                if name:
+                    seen_names.add(name)
+
+        result["suggested_features"] = suggestions
+        result["target_range"] = {
+            "min": target_min,
+            "max": target_max,
+            "original_count": original_count,
+        }
+        return result
+
+    def _build_feature_analysis_prompt(self, file_summaries: list[dict], target_min: int, target_max: int) -> str:
         """Build the AI prompt for feature analysis."""
         files_description = "\n".join([
             f"- {f['filename']} ({f['file_type']}, {f['framework']}, {f['size']} bytes)\n"
@@ -1081,7 +1144,7 @@ for implementing similar functionality in a new project.
 {files_description}
 
 ## Requirements:
-1. Generate **at least 5 features, ideally 8-15 features**
+1. Generate **between {target_min} and {target_max} features** (inclusive)
 2. Features should be ordered by implementation dependency (foundational first)
 3. Each feature should be:
    - Focused (one logical unit of work)

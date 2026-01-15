@@ -74,6 +74,7 @@ class AgentProcessManager:
         self.started_at: datetime | None = None
         self._output_task: asyncio.Task | None = None
         self.yolo_mode: bool = False  # YOLO mode for rapid prototyping
+        self.mode: str | None = None  # Optional run mode (e.g., regression)
 
         # Support multiple callbacks (for multiple WebSocket clients)
         self._output_callbacks: Set[Callable[[str], Awaitable[None]]] = set()
@@ -279,7 +280,12 @@ class AgentProcessManager:
         except Exception as e:
             logger.warning(f"Error stopping Docker containers: {e}")
 
-    async def start(self, yolo_mode: bool = False, auto_start_docker: bool = True) -> tuple[bool, str]:
+    async def start(
+        self,
+        yolo_mode: bool = False,
+        auto_start_docker: bool = True,
+        mode: str | None = None,
+    ) -> tuple[bool, str]:
         """
         Start the agent as a subprocess.
 
@@ -302,8 +308,9 @@ class AgentProcessManager:
             if docker_msg:
                 logger.info(docker_msg)
 
-        # Store YOLO mode for status queries
+        # Store mode for status queries
         self.yolo_mode = yolo_mode
+        self.mode = mode
 
         # Build command - pass absolute path to project directory
         cmd = [
@@ -316,6 +323,9 @@ class AgentProcessManager:
         # Add --yolo flag if YOLO mode is enabled
         if yolo_mode:
             cmd.append("--yolo")
+
+        if mode:
+            cmd.extend(["--mode", mode])
 
         try:
             # Start subprocess with piped stdout/stderr
@@ -378,6 +388,7 @@ class AgentProcessManager:
             self.process = None
             self.started_at = None
             self.yolo_mode = False  # Reset YOLO mode
+            self.mode = None
 
             return True, "Agent stopped"
         except Exception as e:
@@ -459,6 +470,7 @@ class AgentProcessManager:
             "pid": self.pid,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "yolo_mode": self.yolo_mode,
+            "mode": self.mode,
         }
 
 

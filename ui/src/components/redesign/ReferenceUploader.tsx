@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   Upload,
   Link,
@@ -29,6 +29,7 @@ interface ReferenceUploaderProps {
   onReferenceAdded: () => void
   onComponentsUploaded?: (count: number, sessionId: number) => void
   redesignSessionId?: number
+  allowDesignReferences?: boolean
 }
 
 export function ReferenceUploader({
@@ -37,6 +38,7 @@ export function ReferenceUploader({
   onReferenceAdded,
   onComponentsUploaded,
   redesignSessionId,
+  allowDesignReferences = true,
 }: ReferenceUploaderProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [urlInput, setUrlInput] = useState('')
@@ -58,48 +60,48 @@ export function ReferenceUploader({
   const [selectedPage, setSelectedPage] = useState<string>('')
   const [customPageName, setCustomPageName] = useState('')
   const [uploadedPageRefs, setUploadedPageRefs] = useState<UploadedPageReference[]>([])
+  const [frameworkType, setFrameworkType] = useState<string | null>(null)
+  const [scanError, setScanError] = useState<string | null>(null)
+  const [lastScanAt, setLastScanAt] = useState<string | null>(null)
 
-  // Fetch detected pages when page selector is shown (with timeout protection)
-  useEffect(() => {
-    if (showPageSelector && detectedPages.length === 0 && !isLoadingPages) {
-      setIsLoadingPages(true)
+  const handleScanPages = useCallback(async () => {
+    if (isLoadingPages) return
 
-      // AbortController for 15 second timeout
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 15000)
+    setIsLoadingPages(true)
+    setScanError(null)
 
-      fetch(`/api/projects/${projectName}/component-reference/pages`, {
-        signal: controller.signal
-      })
-        .then(res => res.ok ? res.json() : Promise.reject(new Error('Failed to scan pages')))
-        .then(data => {
-          // Handle timeout error from backend
-          if (data.error) {
-            console.warn('Page scan warning:', data.error)
-          }
-          setDetectedPages([...data.pages || [], ...data.layouts || []])
-        })
-        .catch(err => {
-          if (err.name === 'AbortError') {
-            console.warn('Page scan timed out')
-          } else {
-            console.error('Failed to scan project pages:', err)
-          }
-          // Show empty list instead of hanging
-          setDetectedPages([])
-        })
-        .finally(() => {
-          clearTimeout(timeoutId)
-          setIsLoadingPages(false)
-        })
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15000)
 
-      // Cleanup on unmount
-      return () => {
-        clearTimeout(timeoutId)
-        controller.abort()
+    try {
+      const response = await fetch(
+        `/api/projects/${projectName}/component-reference/pages`,
+        { signal: controller.signal }
+      )
+      if (!response.ok) {
+        throw new Error('Failed to scan pages')
       }
+      const data = await response.json()
+
+      if (data.error) {
+        setScanError(data.error)
+      }
+
+      setFrameworkType(data.framework_type || null)
+      setDetectedPages([...(data.pages || []), ...(data.layouts || [])])
+      setLastScanAt(new Date().toISOString())
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        setScanError('Scan timed out after 15 seconds')
+      } else {
+        setScanError('Scan failed - check project structure')
+      }
+      setDetectedPages([])
+    } finally {
+      clearTimeout(timeoutId)
+      setIsLoadingPages(false)
     }
-  }, [showPageSelector, projectName, detectedPages.length, isLoadingPages])
+  }, [isLoadingPages, projectName])
 
   // Get the effective page identifier for upload
   const getPageIdentifier = useCallback((): string | null => {
@@ -305,53 +307,54 @@ export function ReferenceUploader({
 
   return (
     <div className="space-y-6">
-      {/* Upload Area */}
-      <div
-        className={`
-          border-3 border-dashed p-8 text-center transition-colors
-          ${isDragging
-            ? 'border-[var(--color-neo-accent)] bg-[var(--color-neo-accent)]/10'
-            : 'border-[var(--color-neo-border)] bg-[var(--color-neo-bg-alt)]'
-          }
-        `}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <Upload className="mx-auto mb-4 text-[var(--color-neo-muted)]" size={48} />
-        <h3 className="font-display font-bold mb-2">
-          Drop reference images here
-        </h3>
-        <p className="text-sm text-[var(--color-neo-muted)] mb-4">
-          or click to browse (PNG, JPG, WebP up to 10MB)
-        </p>
-        <div className="flex items-center justify-center gap-3">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-            className="neo-btn neo-btn-primary"
-          >
-            <Image size={18} />
-            Upload Images
-          </button>
-          <button
-            onClick={() => setShowUrlInput(true)}
-            disabled={isUploading}
-            className="neo-btn neo-btn-ghost"
-          >
-            <Link size={18} />
-            Add URL
-          </button>
+      {allowDesignReferences && (
+        <div
+          className={`
+            border-3 border-dashed p-8 text-center transition-colors
+            ${isDragging
+              ? 'border-[var(--color-neo-accent)] bg-[var(--color-neo-accent)]/10'
+              : 'border-[var(--color-neo-border)] bg-[var(--color-neo-bg-alt)]'
+            }
+          `}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <Upload className="mx-auto mb-4 text-[var(--color-neo-muted)]" size={48} />
+          <h3 className="font-display font-bold mb-2">
+            Drop reference images here
+          </h3>
+          <p className="text-sm text-[var(--color-neo-muted)] mb-4">
+            or click to browse (PNG, JPG, WebP up to 10MB)
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="neo-btn neo-btn-primary"
+            >
+              <Image size={18} />
+              Upload Images
+            </button>
+            <button
+              onClick={() => setShowUrlInput(true)}
+              disabled={isUploading}
+              className="neo-btn neo-btn-ghost"
+            >
+              <Link size={18} />
+              Add URL
+            </button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            multiple
+            className="hidden"
+            onChange={e => handleFileUpload(e.target.files)}
+          />
         </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          multiple
-          className="hidden"
-          onChange={e => handleFileUpload(e.target.files)}
-        />
-      </div>
+      )}
 
       {/* ZIP Component Upload Area with Page Selector */}
       <div className="space-y-3">
@@ -383,28 +386,56 @@ export function ReferenceUploader({
             {/* Detected Pages Dropdown */}
             <div className="space-y-1">
               <label className="text-xs font-bold uppercase">Detected Pages</label>
-              {isLoadingPages ? (
-                <div className="flex items-center gap-2 text-sm text-[var(--color-neo-muted)]">
-                  <Loader2 size={14} className="animate-spin" />
-                  Scanning project...
-                </div>
-              ) : (
-                <select
-                  value={selectedPage}
-                  onChange={e => {
-                    setSelectedPage(e.target.value)
-                    if (e.target.value) setCustomPageName('')
-                  }}
-                  className="neo-input w-full text-sm"
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleScanPages}
+                  disabled={isLoadingPages}
+                  className="neo-btn neo-btn-ghost text-xs"
                 >
-                  <option value="">-- Select a page --</option>
-                  {detectedPages.map((page, idx) => (
-                    <option key={idx} value={page.route || page.file_path}>
-                      {page.element_name} ({page.route || page.file_path})
-                    </option>
-                  ))}
-                </select>
+                  {isLoadingPages ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Scanning...
+                    </>
+                  ) : (
+                    'Scan Pages'
+                  )}
+                </button>
+                {frameworkType && (
+                  <span className="text-xs text-[var(--color-neo-muted)]">
+                    Detected: {frameworkType}
+                  </span>
+                )}
+                {lastScanAt && (
+                  <span className="text-xs text-[var(--color-neo-muted)]">
+                    Updated
+                  </span>
+                )}
+              </div>
+              {scanError && (
+                <div className="text-xs text-[var(--color-neo-danger)]">
+                  {scanError}
+                </div>
               )}
+              <select
+                value={selectedPage}
+                onChange={e => {
+                  setSelectedPage(e.target.value)
+                  if (e.target.value) setCustomPageName('')
+                }}
+                className="neo-input w-full text-sm"
+                disabled={isLoadingPages || detectedPages.length === 0}
+              >
+                <option value="">
+                  {detectedPages.length > 0 ? '-- Select a page --' : 'Run scan to detect pages'}
+                </option>
+                {detectedPages.map((page, idx) => (
+                  <option key={idx} value={page.route || page.file_path}>
+                    {page.element_name} ({page.route || page.file_path})
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Custom Page Name Input */}
@@ -578,7 +609,7 @@ export function ReferenceUploader({
       )}
 
       {/* URL Input */}
-      {showUrlInput && (
+      {allowDesignReferences && showUrlInput && (
         <div className="flex gap-2">
           <input
             type="url"
@@ -622,59 +653,63 @@ export function ReferenceUploader({
         </div>
       )}
 
-      {/* Reference List */}
-      {references.length > 0 && (
-        <div>
-          <h4 className="font-display font-bold mb-3 uppercase text-sm">
-            Uploaded References ({references.length})
-          </h4>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {references.map((ref, idx) => (
-              <div
-                key={idx}
-                className="border-3 border-[var(--color-neo-border)] bg-white overflow-hidden"
-              >
-                {/* Thumbnail */}
-                <div className="aspect-video bg-[var(--color-neo-bg-alt)] flex items-center justify-center">
-                  {ref.type === 'image' || ref.type === 'url' ? (
-                    <img
-                      src={`data:image/png;base64,${ref.data}`}
-                      alt={ref.metadata?.filename || `Reference ${idx + 1}`}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <Image className="text-[var(--color-neo-muted)]" size={32} />
-                  )}
-                </div>
-                {/* Info */}
-                <div className="p-2 border-t-3 border-[var(--color-neo-border)]">
-                  <p className="text-xs font-medium truncate">
-                    {ref.type === 'url' && ref.metadata?.original_url ? (
-                      <span className="flex items-center gap-1">
-                        <ExternalLink size={12} />
-                        {new URL(ref.metadata.original_url).hostname}
-                      </span>
-                    ) : (
-                      ref.metadata?.filename || `Reference ${idx + 1}`
-                    )}
-                  </p>
-                  <p className="text-xs text-[var(--color-neo-muted)] uppercase">
-                    {ref.type}
-                  </p>
-                </div>
+      {allowDesignReferences && (
+        <>
+          {/* Reference List */}
+          {references.length > 0 && (
+            <div>
+              <h4 className="font-display font-bold mb-3 uppercase text-sm">
+                Uploaded References ({references.length})
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {references.map((ref, idx) => (
+                  <div
+                    key={idx}
+                    className="border-3 border-[var(--color-neo-border)] bg-white overflow-hidden"
+                  >
+                    {/* Thumbnail */}
+                    <div className="aspect-video bg-[var(--color-neo-bg-alt)] flex items-center justify-center">
+                      {ref.type === 'image' || ref.type === 'url' ? (
+                        <img
+                          src={`data:image/png;base64,${ref.data}`}
+                          alt={ref.metadata?.filename || `Reference ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Image className="text-[var(--color-neo-muted)]" size={32} />
+                      )}
+                    </div>
+                    {/* Info */}
+                    <div className="p-2 border-t-3 border-[var(--color-neo-border)]">
+                      <p className="text-xs font-medium truncate">
+                        {ref.type === 'url' && ref.metadata?.original_url ? (
+                          <span className="flex items-center gap-1">
+                            <ExternalLink size={12} />
+                            {new URL(ref.metadata.original_url).hostname}
+                          </span>
+                        ) : (
+                          ref.metadata?.filename || `Reference ${idx + 1}`
+                        )}
+                      </p>
+                      <p className="text-xs text-[var(--color-neo-muted)] uppercase">
+                        {ref.type}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            </div>
+          )}
 
-      {/* Empty State */}
-      {references.length === 0 && (
-        <div className="text-center py-4 text-[var(--color-neo-muted)]">
-          <p className="text-sm">
-            No references added yet. Upload images or add URLs to extract design tokens.
-          </p>
-        </div>
+          {/* Empty State */}
+          {references.length === 0 && (
+            <div className="text-center py-4 text-[var(--color-neo-muted)]">
+              <p className="text-sm">
+                No references added yet. Upload images or add URLs to extract design tokens.
+              </p>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
