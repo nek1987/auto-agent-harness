@@ -116,6 +116,115 @@ def get_project_dir(project_name: str) -> Path:
     return Path(project_path)
 
 
+async def _generate_features_from_components(
+    db: Session,
+    component_session_id: int,
+    project_name: str,
+) -> int:
+    """
+    Generate implementation features from a component reference session.
+
+    Creates Feature records for each component in the reference session,
+    allowing the agent to implement them one by one.
+
+    Returns the number of features created.
+    """
+    from api.database import ComponentReferenceSession, PageReference
+
+    # Get the component reference session
+    ref_session = db.query(ComponentReferenceSession).filter(
+        ComponentReferenceSession.id == component_session_id
+    ).first()
+
+    if not ref_session or not ref_session.components:
+        return 0
+
+    # Get page reference if exists (for category naming)
+    page_ref = db.query(PageReference).filter(
+        PageReference.reference_session_id == component_session_id
+    ).first()
+
+    base_category = "components"
+    if page_ref and page_ref.page_identifier:
+        base_category = page_ref.page_identifier.strip("/").split("/")[0].lower() or "components"
+
+    # Extract components to create
+    components_to_create = []
+
+    # Try generation_plan first
+    if ref_session.generation_plan and ref_session.generation_plan.get("components_to_create"):
+        for comp in ref_session.generation_plan["components_to_create"]:
+            components_to_create.append({
+                "name": comp.get("name", "UnknownComponent"),
+                "based_on": comp.get("based_on"),
+            })
+    else:
+        # Fall back to components list
+        seen_names = set()
+        for comp in ref_session.components:
+            filename = comp.get("filename", "")
+            name = filename.replace(".tsx", "").replace(".jsx", "").replace(".vue", "").replace(".svelte", "")
+            if name.lower() in ("index", "types", "utils", "helpers", "constants", "styles"):
+                continue
+            if name in seen_names:
+                continue
+            seen_names.add(name)
+            components_to_create.append({
+                "name": name,
+                "based_on": filename,
+            })
+
+    if not components_to_create:
+        return 0
+
+    # Get analysis context
+    analysis = ref_session.extracted_analysis or {}
+    styling_approach = analysis.get("styling_approach", "tailwind")
+
+    # Get starting priority
+    _, _, Feature = _get_db_classes()
+    max_priority_result = db.query(Feature.priority).order_by(Feature.priority.desc()).first()
+    start_priority = (max_priority_result[0] + 1) if max_priority_result else 1
+
+    created_count = 0
+
+    for i, comp_data in enumerate(components_to_create):
+        comp_name = comp_data["name"]
+        based_on = comp_data.get("based_on", "reference")
+
+        steps = [
+            f"Create {comp_name} component based on reference from {based_on}",
+            f"Apply {styling_approach} styling following reference structure",
+            "Implement TypeScript props interface",
+            "Add state management and hooks as needed",
+            "Ensure responsive design matches reference",
+            "Test component functionality",
+        ]
+
+        feature = Feature(
+            priority=start_priority + i,
+            category=base_category,
+            name=f"Implement {comp_name} component",
+            description=(
+                f"Create the {comp_name} component based on reference code. "
+                f"Follow patterns from component reference session #{component_session_id}. "
+                f"Use {styling_approach} for styling."
+            ),
+            steps=steps,
+            passes=False,
+            in_progress=False,
+            item_type="feature",
+            arch_layer=6,  # UI Components
+            reference_session_id=component_session_id,
+            page_reference_id=page_ref.id if page_ref else None,
+        )
+        db.add(feature)
+        created_count += 1
+
+    db.commit()
+    return created_count
+
+
 # ============================================================================
 # Endpoints
 # ============================================================================
@@ -413,6 +522,8 @@ async def approve_phase(
 
         # Create a Feature task on first approval so agent picks it up
         feature_created = False
+        generated_features_count = 0
+
         if not existing_redesign_feature:
             redesign_feature = Feature(
                 item_type="redesign",
@@ -439,11 +550,25 @@ async def approve_phase(
             feature_created = True
             logger.info(f"Created redesign feature {redesign_feature.id} for session {session.id}")
 
+            # Auto-generate implementation features from component reference if present
+            if session.component_session_id:
+                generated_features_count = await _generate_features_from_components(
+                    db=db,
+                    component_session_id=session.component_session_id,
+                    project_name=project_name,
+                )
+                if generated_features_count > 0:
+                    logger.info(
+                        f"Generated {generated_features_count} implementation features "
+                        f"from component session {session.component_session_id}"
+                    )
+
         return {
             "status": "ok",
             "phase": request.phase,
             "session_status": session.status,
             "feature_created": feature_created,
+            "generated_features": generated_features_count,
         }
 
 

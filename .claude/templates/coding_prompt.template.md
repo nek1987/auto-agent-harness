@@ -50,12 +50,23 @@ chmod +x init.sh
 
 Otherwise, start servers manually and document the process.
 
-### STEP 3: VERIFICATION TEST (CRITICAL!)
+### STEP 3: VERIFICATION TEST (CONDITIONAL)
 
-**MANDATORY BEFORE NEW WORK:**
+**Check if there's pending work first:**
 
-The previous session may have introduced bugs. Before implementing anything
-new, you MUST run verification tests.
+```
+Use the feature_get_stats tool
+```
+
+**Decision:**
+- If `pending > 0` OR `in_progress > 0`: Run regression tests below
+- If `pending == 0` AND `in_progress == 0`: Skip regression, go directly to STEP 4
+
+This prevents infinite regression loops when all work is complete.
+
+---
+
+**If there IS pending work, run regression tests:**
 
 Run 1-2 of the features marked as passing that are most core to the app's functionality to verify they still work.
 
@@ -126,6 +137,23 @@ Analyze the bug and create fix features using `feature_create_bulk` with `parent
 #### If type="bug_fix" - Implement Bug Fix
 
 Implement the fix for the parent bug, then mark as passing.
+
+#### If type="all_done" - Project Complete!
+
+All features are passing. The project is complete!
+
+1. Run `project_completion_check` tool to generate the completion report
+2. Review COMPLETION_REPORT.md if generated
+3. Update `claude-progress.txt` with completion status
+4. Make a final commit: `git commit -m "chore: project complete - all features passing"`
+5. **STOP working** - do NOT continue to another session
+
+Congratulations! You have successfully completed the project!
+
+#### If type="in_progress" - Wait for Other Sessions
+
+All pending features are currently being worked on by other sessions.
+Either wait for them to complete, or use `feature_clear_in_progress` to unstick a feature.
 
 #### If type="feature" - Implement Regular Feature
 

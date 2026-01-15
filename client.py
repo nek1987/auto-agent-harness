@@ -96,6 +96,7 @@ FEATURE_MCP_TOOLS = [
     "mcp__features__feature_mark_passing",
     "mcp__features__feature_skip",
     "mcp__features__feature_create_bulk",
+    "mcp__features__feature_generate_from_reference",
 ]
 
 # Redesign MCP tools for frontend redesign operations

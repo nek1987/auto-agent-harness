@@ -31,7 +31,7 @@ from sqlalchemy.sql.expression import func
 # Add parent directory to path so we can import from api module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from api.database import Feature, create_database
+from api.database import Feature, ComponentReferenceSession, PageReference, create_database
 from api.migration import migrate_json_to_sqlite
 from lib.architecture_layers import get_layer_for_category, ArchLayer, get_layer_name
 from lib.feature_splitter import FeatureSplitter, split_features
@@ -1035,6 +1035,186 @@ def feature_get_skills_context(
             "loaded_skills": loaded_skills,
             "message": f"Loaded {len(loaded_skills)} skill(s) for implementation guidance"
         }, indent=2)
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_generate_from_reference(
+    reference_session_id: Annotated[int, Field(description="The ID of the ComponentReferenceSession to generate features from", ge=1)],
+    page_identifier: Annotated[str, Field(description="Page identifier like /dashboard, /login. Used for category")] = None,
+    category_prefix: Annotated[str, Field(description="Optional prefix for feature category")] = None,
+) -> str:
+    """Generate implementation features from a component reference session.
+
+    Analyzes the component reference session and creates features for each
+    component that needs to be implemented. This connects reference code
+    (e.g., from v0.dev, shadcn/ui) to actual work items for the agent.
+
+    The reference session should have:
+    - components: List of uploaded component files
+    - extracted_analysis: Analysis from Claude (patterns, styling, etc.)
+    - generation_plan: Plan with components_to_create (optional)
+
+    Created features will:
+    - Be linked to the reference via reference_session_id
+    - Have arch_layer=6 (UI Components)
+    - Include implementation steps based on the analysis
+    - Reference the original component patterns
+
+    Args:
+        reference_session_id: ID of the ComponentReferenceSession
+        page_identifier: Page route (e.g., "/dashboard") - used for category
+        category_prefix: Optional category prefix (defaults to page name)
+
+    Returns:
+        JSON with:
+        - generated_features: List of created features
+        - total: Count of features created
+        - reference_session_id: The source session ID
+    """
+    session = get_session()
+    try:
+        # Get the component reference session
+        ref_session = session.query(ComponentReferenceSession).filter(
+            ComponentReferenceSession.id == reference_session_id
+        ).first()
+
+        if ref_session is None:
+            return json.dumps({
+                "error": f"ComponentReferenceSession with ID {reference_session_id} not found"
+            })
+
+        if not ref_session.components or len(ref_session.components) == 0:
+            return json.dumps({
+                "error": "Reference session has no components. Upload a ZIP file first."
+            })
+
+        # Determine category from page_identifier or prefix
+        if category_prefix:
+            base_category = category_prefix.lower().replace("/", "").replace(" ", "_")
+        elif page_identifier:
+            base_category = page_identifier.strip("/").split("/")[0].lower() or "components"
+        else:
+            base_category = "components"
+
+        # Extract components to create from analysis or components list
+        components_to_create = []
+
+        # First try generation_plan if available
+        if ref_session.generation_plan and ref_session.generation_plan.get("components_to_create"):
+            for comp in ref_session.generation_plan["components_to_create"]:
+                components_to_create.append({
+                    "name": comp.get("name", "UnknownComponent"),
+                    "based_on": comp.get("based_on"),
+                    "adaptations": comp.get("adaptations"),
+                    "patterns": comp.get("patterns_to_apply", []),
+                })
+        else:
+            # Fall back to extracting from components list
+            seen_names = set()
+            for comp in ref_session.components:
+                filename = comp.get("filename", "")
+                # Extract component name from filename (e.g., "Button.tsx" -> "Button")
+                name = filename.replace(".tsx", "").replace(".jsx", "").replace(".vue", "").replace(".svelte", "")
+                # Skip utility files, index files, types, etc.
+                if name.lower() in ("index", "types", "utils", "helpers", "constants", "styles"):
+                    continue
+                if name in seen_names:
+                    continue
+                seen_names.add(name)
+
+                components_to_create.append({
+                    "name": name,
+                    "based_on": filename,
+                    "file_type": comp.get("file_type"),
+                    "framework": comp.get("framework"),
+                })
+
+        if not components_to_create:
+            return json.dumps({
+                "error": "No components found in reference session to generate features from."
+            })
+
+        # Get analysis for additional context
+        analysis = ref_session.extracted_analysis or {}
+        styling_approach = analysis.get("styling_approach", "tailwind")
+        dependencies = analysis.get("dependencies", [])
+
+        # Get starting priority
+        max_priority_result = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
+        start_priority = (max_priority_result[0] + 1) if max_priority_result else 1
+
+        # Get page reference if it exists
+        page_ref = None
+        if page_identifier:
+            page_ref = session.query(PageReference).filter(
+                PageReference.project_name == ref_session.project_name,
+                PageReference.page_identifier == page_identifier
+            ).first()
+
+        created_features = []
+
+        for i, comp_data in enumerate(components_to_create):
+            comp_name = comp_data["name"]
+            based_on = comp_data.get("based_on", "reference component")
+
+            # Build implementation steps
+            steps = [
+                f"Create {comp_name} component based on reference pattern from {based_on}",
+                f"Apply {styling_approach} styling following reference structure",
+                "Implement proper TypeScript props interface",
+                "Add necessary state management and hooks",
+                "Ensure responsive design matches reference",
+                "Test component in isolation",
+                "Verify accessibility (ARIA, keyboard navigation)",
+            ]
+
+            if dependencies:
+                steps.insert(2, f"Install required dependencies: {', '.join(dependencies[:3])}")
+
+            # Create feature
+            feature = Feature(
+                priority=start_priority + i,
+                category=base_category,
+                name=f"Implement {comp_name} component",
+                description=(
+                    f"Create the {comp_name} component based on the reference code from "
+                    f"component reference session #{reference_session_id}. "
+                    f"Follow the patterns and styling from the reference, adapting to project conventions. "
+                    f"Use {styling_approach} for styling."
+                ),
+                steps=steps,
+                passes=False,
+                in_progress=False,
+                item_type="feature",
+                arch_layer=6,  # UI Components layer
+                reference_session_id=reference_session_id,
+                page_reference_id=page_ref.id if page_ref else None,
+            )
+            session.add(feature)
+            session.flush()  # Get the ID
+
+            created_features.append({
+                "id": feature.id,
+                "name": feature.name,
+                "category": feature.category,
+                "based_on": based_on,
+            })
+
+        session.commit()
+
+        return json.dumps({
+            "generated_features": created_features,
+            "total": len(created_features),
+            "reference_session_id": reference_session_id,
+            "page_identifier": page_identifier,
+            "category": base_category,
+            "message": f"Generated {len(created_features)} features from component reference"
+        }, indent=2)
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": str(e)})
     finally:
         session.close()
 
