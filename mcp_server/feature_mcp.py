@@ -280,7 +280,13 @@ def feature_get_next() -> str:
             layer_num = feature.arch_layer if feature.arch_layer is not None else 8
             layer_name = get_layer_name(ArchLayer(layer_num))
 
-            return json.dumps({
+            # Check if feature has component reference
+            has_reference = (
+                feature.reference_session_id is not None or
+                feature.page_reference_id is not None
+            )
+
+            response = {
                 "type": "feature",
                 "feature": feature.to_dict(),
                 "layer_info": {
@@ -288,7 +294,26 @@ def feature_get_next() -> str:
                     "layer_name": layer_name,
                     "hint": f"This is a {layer_name} feature (layer {layer_num}/8)"
                 }
-            }, indent=2)
+            }
+
+            # Add component reference instruction if available
+            if has_reference:
+                response["has_component_reference"] = True
+                response["component_reference_instruction"] = (
+                    "⚠️ COMPONENT REFERENCE AVAILABLE!\n"
+                    "This feature has uploaded component reference with design patterns.\n"
+                    "BEFORE implementing, you MUST call:\n"
+                    f"  component_ref_get_for_feature with feature_id={feature.id}\n"
+                    "\n"
+                    "This will return:\n"
+                    "- Styling approach (tailwind, css-modules, etc.)\n"
+                    "- Component patterns and props interface\n"
+                    "- Dependencies to install\n"
+                    "\n"
+                    "Use these patterns to guide your implementation!"
+                )
+
+            return json.dumps(response, indent=2)
 
         # 4. Check if there are any non-passing features at all
         any_pending = session.query(Feature).filter(Feature.passes == False).first()

@@ -164,43 +164,22 @@ Once you've retrieved a regular feature, **immediately mark it as in-progress**:
 Use the feature_mark_in_progress tool with feature_id=42
 ```
 
-#### Load Expert Skills (If Available)
+#### Check for Component Reference (MANDATORY - DO THIS FIRST!)
 
-If the feature has `assigned_skills` in its data, load the skills context to guide your implementation:
-
-```
-# Load skills context for better implementation quality
-Use the feature_get_skills_context tool with feature_id=42
-```
-
-The skills context contains best practices, patterns, and guidelines from expert skills that were assigned to this feature during planning. Apply these practices while implementing the feature.
-
-#### Load Component Reference (If Available)
-
-Component references provide design patterns from external sources (e.g., v0.dev, shadcn/ui).
-The system supports **multi-page references** - different ZIP files for different pages (dashboard, login, settings, etc.).
-
-**Auto-matching**: Use `component_ref_get_for_feature` to automatically find the best page reference:
+**ALWAYS check if the feature has a component reference BEFORE implementing:**
 
 ```
-# Get auto-matched component reference for this feature
+# Get component reference for this feature (ALWAYS call this first!)
 Use the component_ref_get_for_feature tool with feature_id=42
 ```
 
-The tool will:
-1. Check if the feature has a direct `page_reference_id` link (highest priority)
-2. Auto-match based on feature category, name, and description keywords
-3. Return the matching reference with analysis and plan
+**If `matched: true` is returned** - YOU MUST USE THESE PATTERNS:
+1. Extract the **styling approach** (tailwind, css-modules, styled-components)
+2. Extract the **component patterns** (composition, props interface, state management)
+3. Extract **dependencies** that need to be installed (icons, animation libraries)
+4. **Apply these patterns** when implementing the feature
 
-If no auto-match is found, you can check available page references:
-
-```
-# List all page references for this project
-Use the component_ref_list_references tool
-
-# Scan project to see detected pages
-Use the component_ref_scan_project tool
-```
+**If `matched: false`** - proceed with standard implementation.
 
 The reference context contains:
 - **Patterns**: Composition, props, and structure patterns from reference components
@@ -213,6 +192,17 @@ The reference context contains:
 - Project's existing architecture and folder structure
 - Project's design system and styling approach
 - Project's coding conventions and TypeScript patterns
+
+#### Load Expert Skills (If Available)
+
+If the feature has `assigned_skills` in its data, load the skills context to guide your implementation:
+
+```
+# Load skills context for better implementation quality
+Use the feature_get_skills_context tool with feature_id=42
+```
+
+The skills context contains best practices, patterns, and guidelines from expert skills that were assigned to this feature during planning. Apply these practices while implementing the feature.
 
 Focus on completing one feature perfectly and completing its testing steps in this session before moving on to other features.
 It's ok if you only complete one feature in this session, as there will be more sessions later that continue to make progress.
