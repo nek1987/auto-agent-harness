@@ -492,7 +492,15 @@ def component_ref_analyze() -> str:
             component_analyses = []
 
             for comp in session.components:
-                if comp.get("file_type") not in ("component", "hook"):
+                # Analyze ALL code files, not just "component" and "hook" types
+                # This allows AI to understand the full codebase structure
+                # Only skip very small files (likely stubs or re-exports)
+                content = comp.get("content", "")
+                if len(content) < 50:
+                    continue
+
+                # Skip files that are just type exports or index re-exports
+                if comp.get("file_type") == "types" and content.count("\n") < 5:
                     continue
 
                 analysis = _analyze_single_component(

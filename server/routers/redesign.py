@@ -426,12 +426,21 @@ async def generate_plan(
     project_name: str,
 ):
     """
-    Generate an implementation plan.
+    Generate an implementation plan and create features.
 
-    Detects the project framework and generates a plan for
-    applying the design tokens to the codebase.
+    Detects the project framework, generates a plan for applying the design
+    tokens, and creates features for the agent to implement.
+
+    This is the key step where features are created - no need to click
+    "approve" before starting the agent.
     """
+    import json
+    from api.database import ComponentReferenceSession
+    from server.services.component_reference_service import ComponentReferenceService
+
     project_dir = get_project_dir(project_name)
+    _, _, Feature = _get_db_classes()
+
     with get_db_session(project_dir) as db:
         service = RedesignService(db, project_dir)
 
@@ -444,10 +453,100 @@ async def generate_plan(
 
         try:
             session = await service.generate_plan(session.id)
+
+            # Track generated features
+            generated_features_count = 0
+            redesign_feature_created = False
+
+            # Check if redesign feature already exists
+            existing_redesign_feature = db.query(Feature).filter(
+                Feature.item_type == "redesign",
+                Feature.redesign_session_id == session.id,
+            ).first()
+
+            # NEW: AI-driven feature generation from component references
+            if session.component_session_id:
+                component_session = db.query(ComponentReferenceSession).filter(
+                    ComponentReferenceSession.id == session.component_session_id
+                ).first()
+
+                if component_session and component_session.components:
+                    logger.info(
+                        f"Starting AI analysis of {len(component_session.components)} "
+                        f"components for session {session.id}"
+                    )
+
+                    # Use AI to analyze components and generate smart features
+                    comp_service = ComponentReferenceService(db, project_dir)
+                    analysis = await comp_service.ai_analyze_components_for_features(
+                        component_session
+                    )
+
+                    # Create features from AI analysis
+                    suggested_features = analysis.get("suggested_features", [])
+                    if suggested_features:
+                        # Get starting priority (after any existing features)
+                        max_priority_result = db.query(Feature.priority).order_by(
+                            Feature.priority.desc()
+                        ).first()
+                        start_priority = (max_priority_result[0] + 1) if max_priority_result else 1
+
+                        for i, feat_data in enumerate(suggested_features):
+                            feature = Feature(
+                                priority=start_priority + i,
+                                category=feat_data.get("category", "components"),
+                                name=feat_data.get("name", f"Feature {i+1}"),
+                                description=feat_data.get("description", ""),
+                                steps=feat_data.get("steps", []),
+                                dependencies=feat_data.get("dependencies", []),
+                                arch_layer=feat_data.get("arch_layer", 6),
+                                reference_session_id=session.component_session_id,
+                                item_type="feature",
+                                passes=False,
+                                in_progress=False,
+                            )
+                            db.add(feature)
+                            generated_features_count += 1
+
+                        db.commit()
+                        logger.info(
+                            f"AI generated {generated_features_count} features "
+                            f"from component analysis for session {session.id}"
+                        )
+
+            # Create redesign feature if not exists
+            if not existing_redesign_feature:
+                redesign_feature = Feature(
+                    item_type="redesign",
+                    priority=-1,  # Higher than bugs (0) - redesign is top priority
+                    category="design-system",
+                    name=f"Apply design tokens from redesign session {session.id}",
+                    description=(
+                        f"Apply extracted design tokens to the project codebase. "
+                        f"Framework: {session.framework_detected or 'unknown'}. "
+                        f"Use redesign MCP tools to get tokens, plan, and apply changes."
+                    ),
+                    steps=json.dumps([
+                        {"step": "Get design tokens via redesign_get_tokens tool"},
+                        {"step": "Get change plan via redesign_get_plan tool"},
+                        {"step": "For each approved phase, apply file changes using Edit tool"},
+                        {"step": "Complete session via redesign_complete_session tool"},
+                    ]),
+                    passes=False,
+                    in_progress=False,
+                    redesign_session_id=session.id,
+                )
+                db.add(redesign_feature)
+                db.commit()
+                redesign_feature_created = True
+                logger.info(f"Created redesign feature for session {session.id}")
+
             return {
                 "status": "ok",
                 "framework": session.framework_detected,
                 "plan": session.change_plan,
+                "redesign_feature_created": redesign_feature_created,
+                "generated_features": generated_features_count,
             }
         except Exception as e:
             logger.error(f"Plan generation failed: {e}")
@@ -489,16 +588,13 @@ async def approve_phase(
     """
     Approve a phase of the redesign plan.
 
-    User must approve each phase before the agent can proceed
-    with implementation.
+    User approves each phase to allow the agent to apply changes.
+    The agent checks approval via redesign_check_approval before applying.
 
-    On first approval, creates a Feature task so the agent picks up
-    the redesign work via feature_get_next().
+    Note: Features are now created in generate_plan, not here.
+    This endpoint only records the approval.
     """
-    import json
-
     project_dir = get_project_dir(project_name)
-    _, _, Feature = _get_db_classes()
 
     with get_db_session(project_dir) as db:
         service = RedesignService(db, project_dir)
@@ -507,12 +603,6 @@ async def approve_phase(
         if not session:
             raise HTTPException(status_code=404, detail="No active redesign session")
 
-        # Check if this is the first approval (no existing redesign feature for this session)
-        existing_redesign_feature = db.query(Feature).filter(
-            Feature.item_type == "redesign",
-            Feature.redesign_session_id == session.id,
-        ).first()
-
         session = await service.approve_phase(
             session.id,
             request.phase,
@@ -520,55 +610,12 @@ async def approve_phase(
             request.comment,
         )
 
-        # Create a Feature task on first approval so agent picks it up
-        feature_created = False
-        generated_features_count = 0
-
-        if not existing_redesign_feature:
-            redesign_feature = Feature(
-                item_type="redesign",
-                priority=-1,  # Higher than bugs (0) - redesign is top priority
-                category="design-system",
-                name=f"Apply design tokens from redesign session {session.id}",
-                description=(
-                    f"Apply extracted design tokens to the project codebase. "
-                    f"Framework: {session.framework_detected or 'unknown'}. "
-                    f"Use redesign MCP tools to get tokens, plan, and apply changes."
-                ),
-                steps=json.dumps([
-                    {"step": "Get design tokens via redesign_get_tokens tool"},
-                    {"step": "Get change plan via redesign_get_plan tool"},
-                    {"step": "For each approved phase, apply file changes using Edit tool"},
-                    {"step": "Complete session via redesign_complete_session tool"},
-                ]),
-                passes=False,
-                in_progress=False,
-                redesign_session_id=session.id,
-            )
-            db.add(redesign_feature)
-            db.commit()
-            feature_created = True
-            logger.info(f"Created redesign feature {redesign_feature.id} for session {session.id}")
-
-            # Auto-generate implementation features from component reference if present
-            if session.component_session_id:
-                generated_features_count = await _generate_features_from_components(
-                    db=db,
-                    component_session_id=session.component_session_id,
-                    project_name=project_name,
-                )
-                if generated_features_count > 0:
-                    logger.info(
-                        f"Generated {generated_features_count} implementation features "
-                        f"from component session {session.component_session_id}"
-                    )
+        logger.info(f"Approved phase '{request.phase}' for session {session.id}")
 
         return {
             "status": "ok",
             "phase": request.phase,
             "session_status": session.status,
-            "feature_created": feature_created,
-            "generated_features": generated_features_count,
         }
 
 

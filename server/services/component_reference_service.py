@@ -976,3 +976,295 @@ class ComponentReferenceService:
             f"to redesign session {redesign_session_id}"
         )
         return redesign_session_id
+
+    # ========================================================================
+    # AI-Driven Feature Generation
+    # ========================================================================
+
+    async def ai_analyze_components_for_features(
+        self,
+        session: ComponentReferenceSession,
+    ) -> dict:
+        """
+        Use Claude to analyze all components and generate a comprehensive feature list.
+
+        Analyzes ALL files in the session (not just "component" types) and uses
+        AI to identify logical components, patterns, and generate implementation
+        features with dependencies.
+
+        Args:
+            session: ComponentReferenceSession with components to analyze
+
+        Returns:
+            {
+                "identified_components": [...],
+                "suggested_features": [
+                    {
+                        "name": "Feature name",
+                        "description": "What this feature does",
+                        "steps": ["Step 1", "Step 2", ...],
+                        "dependencies": [],
+                        "source_files": ["file1.tsx", "file2.ts"],
+                        "category": "category-name",
+                        "arch_layer": 1-6
+                    }
+                ],
+                "analysis_summary": "..."
+            }
+        """
+        if not session.components:
+            return self._fallback_feature_generation([])
+
+        # Prepare file summaries for AI (truncate content to avoid token limits)
+        file_summaries = []
+        for comp in session.components:
+            content = comp.get("content", "")
+            # Truncate to first 500 chars for summary
+            preview = content[:500] + "..." if len(content) > 500 else content
+
+            file_summaries.append({
+                "filename": comp.get("filename", "unknown"),
+                "filepath": comp.get("filepath", ""),
+                "file_type": comp.get("file_type", "unknown"),
+                "framework": comp.get("framework", "unknown"),
+                "size": comp.get("size", 0),
+                "preview": preview,
+            })
+
+        # Build the AI prompt
+        prompt = self._build_feature_analysis_prompt(file_summaries)
+
+        try:
+            # Call Claude API
+            response = self.anthropic_client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4096,
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            # Parse JSON response
+            response_text = response.content[0].text
+            # Extract JSON from response (handle markdown code blocks)
+            if "```json" in response_text:
+                json_start = response_text.find("```json") + 7
+                json_end = response_text.find("```", json_start)
+                response_text = response_text[json_start:json_end]
+            elif "```" in response_text:
+                json_start = response_text.find("```") + 3
+                json_end = response_text.find("```", json_start)
+                response_text = response_text[json_start:json_end]
+
+            result = json.loads(response_text.strip())
+            logger.info(
+                f"AI generated {len(result.get('suggested_features', []))} features "
+                f"from {len(session.components)} files"
+            )
+            return result
+
+        except Exception as e:
+            logger.warning(f"AI analysis failed, using fallback: {e}")
+            return self._fallback_feature_generation(session.components)
+
+    def _build_feature_analysis_prompt(self, file_summaries: list[dict]) -> str:
+        """Build the AI prompt for feature analysis."""
+        files_description = "\n".join([
+            f"- {f['filename']} ({f['file_type']}, {f['framework']}, {f['size']} bytes)\n"
+            f"  Preview: {f['preview'][:200]}..."
+            for f in file_summaries[:50]  # Limit to 50 files to avoid token limits
+        ])
+
+        return f"""You are analyzing {len(file_summaries)} files from a reference codebase.
+Your task is to understand the component structure and generate a comprehensive feature list
+for implementing similar functionality in a new project.
+
+## Files to analyze:
+{files_description}
+
+## Requirements:
+1. Generate **at least 5 features, ideally 8-15 features**
+2. Features should be ordered by implementation dependency (foundational first)
+3. Each feature should be:
+   - Focused (one logical unit of work)
+   - Testable (clear completion criteria)
+   - Linked to relevant source files from the reference
+4. Include dependencies between features (feature index, 0-based)
+5. Assign appropriate arch_layer:
+   - 1: Infrastructure/Config
+   - 2: Data/API Layer
+   - 3: Business Logic
+   - 4: Hooks/State
+   - 5: UI Components
+   - 6: Pages/Views
+
+## Output JSON format (return ONLY valid JSON):
+{{
+    "identified_components": [
+        {{"name": "ComponentName", "type": "ui-component|hook|utility|page", "files": ["file1.tsx"]}}
+    ],
+    "suggested_features": [
+        {{
+            "name": "Set up design system and theme",
+            "description": "Create the foundational design tokens, colors, typography, and spacing system",
+            "steps": [
+                "Create theme configuration file",
+                "Define color palette variables",
+                "Set up typography scale",
+                "Create spacing system"
+            ],
+            "dependencies": [],
+            "source_files": ["theme.ts", "colors.ts"],
+            "category": "infrastructure",
+            "arch_layer": 1
+        }},
+        {{
+            "name": "Create base UI primitives",
+            "description": "Implement foundational UI components like Button, Input, Card",
+            "steps": [
+                "Create Button component with variants",
+                "Create Input component with validation",
+                "Create Card component with styling"
+            ],
+            "dependencies": [0],
+            "source_files": ["Button.tsx", "Input.tsx", "Card.tsx"],
+            "category": "ui-components",
+            "arch_layer": 5
+        }}
+    ],
+    "analysis_summary": "Brief summary of what was found in the reference code"
+}}
+
+Analyze the files and return ONLY the JSON response, no additional text."""
+
+    def _fallback_feature_generation(self, components: list) -> dict:
+        """
+        Generate features without AI when API is unavailable.
+
+        Uses heuristics based on file structure and naming patterns.
+
+        Args:
+            components: List of component dicts from session
+
+        Returns:
+            Dict with suggested_features in same format as AI analysis
+        """
+        from collections import defaultdict
+
+        if not components:
+            return {
+                "identified_components": [],
+                "suggested_features": [],
+                "analysis_summary": "No components found to analyze",
+            }
+
+        # Group files by category based on path and naming
+        by_category = defaultdict(list)
+
+        for comp in components:
+            filepath = comp.get("filepath", comp.get("filename", ""))
+            filename = comp.get("filename", "")
+            file_type = comp.get("file_type", "")
+
+            # Categorize by path patterns
+            filepath_lower = filepath.lower()
+            if "/components/" in filepath_lower or file_type == "component":
+                if any(x in filepath_lower for x in ["ui/", "primitives/", "common/"]):
+                    by_category["ui-primitives"].append(comp)
+                elif any(x in filepath_lower for x in ["form", "input", "select"]):
+                    by_category["form-components"].append(comp)
+                elif any(x in filepath_lower for x in ["layout", "nav", "sidebar", "header"]):
+                    by_category["layout"].append(comp)
+                else:
+                    by_category["feature-components"].append(comp)
+            elif "/hooks/" in filepath_lower or file_type == "hook" or filename.startswith("use"):
+                by_category["hooks"].append(comp)
+            elif "/pages/" in filepath_lower or "/views/" in filepath_lower or "/app/" in filepath_lower:
+                by_category["pages"].append(comp)
+            elif file_type == "styles" or any(x in filepath_lower for x in [".css", ".scss", "theme", "style"]):
+                by_category["styles"].append(comp)
+            elif file_type == "types" or "types" in filepath_lower or "interface" in filepath_lower:
+                by_category["types"].append(comp)
+            elif file_type == "utility" or any(x in filepath_lower for x in ["util", "helper", "lib"]):
+                by_category["utilities"].append(comp)
+            else:
+                by_category["other"].append(comp)
+
+        # Generate features from categories
+        features = []
+        feature_index = 0
+
+        # Define category order and templates
+        category_templates = [
+            ("styles", "Set up design system and styling", "infrastructure", 1, []),
+            ("types", "Define TypeScript types and interfaces", "infrastructure", 1, []),
+            ("utilities", "Create utility functions and helpers", "infrastructure", 2, [0, 1]),
+            ("hooks", "Implement custom React hooks", "hooks", 4, [0, 1, 2]),
+            ("ui-primitives", "Create base UI components", "ui-components", 5, [0]),
+            ("form-components", "Implement form components", "ui-components", 5, [0, 4]),
+            ("layout", "Build layout and navigation", "layout", 5, [0, 4]),
+            ("feature-components", "Create feature components", "features", 5, [0, 4, 5]),
+            ("pages", "Implement pages and views", "pages", 6, [0, 4, 6, 7]),
+        ]
+
+        for cat_key, name_template, category, arch_layer, dep_indices in category_templates:
+            if cat_key not in by_category:
+                continue
+
+            files = by_category[cat_key]
+            if not files:
+                continue
+
+            # Create steps from files
+            steps = []
+            for f in files[:5]:  # Limit to 5 files per step list
+                fname = f.get("filename", "unknown")
+                steps.append(f"Implement {fname.replace('.tsx', '').replace('.ts', '')}")
+
+            if len(files) > 5:
+                steps.append(f"... and {len(files) - 5} more files")
+
+            # Adjust dependencies to valid indices
+            valid_deps = [d for d in dep_indices if d < feature_index]
+
+            features.append({
+                "name": name_template,
+                "description": f"Create {len(files)} {cat_key.replace('-', ' ')} based on reference code",
+                "steps": steps,
+                "dependencies": valid_deps,
+                "source_files": [f.get("filename", "") for f in files],
+                "category": category,
+                "arch_layer": arch_layer,
+            })
+            feature_index += 1
+
+        # Ensure minimum 5 features by splitting large categories if needed
+        if len(features) < 5 and by_category:
+            # Add generic "other" feature if we have ungrouped files
+            if "other" in by_category and by_category["other"]:
+                files = by_category["other"]
+                features.append({
+                    "name": "Implement additional components",
+                    "description": f"Create {len(files)} additional components from reference",
+                    "steps": [f"Implement {f.get('filename', 'unknown')}" for f in files[:5]],
+                    "dependencies": [0] if features else [],
+                    "source_files": [f.get("filename", "") for f in files],
+                    "category": "components",
+                    "arch_layer": 5,
+                })
+
+        # Build identified components list
+        identified = []
+        for comp in components:
+            identified.append({
+                "name": comp.get("filename", "").replace(".tsx", "").replace(".ts", ""),
+                "type": comp.get("file_type", "unknown"),
+                "files": [comp.get("filename", "")],
+            })
+
+        return {
+            "identified_components": identified[:50],  # Limit to 50
+            "suggested_features": features,
+            "analysis_summary": (
+                f"Fallback analysis: Found {len(components)} files, "
+                f"generated {len(features)} features across {len(by_category)} categories"
+            ),
+        }
