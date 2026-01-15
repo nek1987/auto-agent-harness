@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   Upload,
   Link,
@@ -10,8 +10,11 @@ import {
   FileArchive,
   FileCode,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  MapPin,
 } from 'lucide-react'
-import type { RedesignReference } from '../../lib/types'
+import type { RedesignReference, DetectedPage, UploadedPageReference } from '../../lib/types'
 
 interface UploadedComponent {
   filename: string
@@ -47,6 +50,45 @@ export function ReferenceUploader({
   const [zipFilename, setZipFilename] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const zipInputRef = useRef<HTMLInputElement>(null)
+
+  // Page selection state for ZIP uploads
+  const [showPageSelector, setShowPageSelector] = useState(false)
+  const [detectedPages, setDetectedPages] = useState<DetectedPage[]>([])
+  const [isLoadingPages, setIsLoadingPages] = useState(false)
+  const [selectedPage, setSelectedPage] = useState<string>('')
+  const [customPageName, setCustomPageName] = useState('')
+  const [uploadedPageRefs, setUploadedPageRefs] = useState<UploadedPageReference[]>([])
+
+  // Fetch detected pages when page selector is shown
+  useEffect(() => {
+    if (showPageSelector && detectedPages.length === 0 && !isLoadingPages) {
+      setIsLoadingPages(true)
+      fetch(`/api/projects/${projectName}/component-reference/pages`)
+        .then(res => res.ok ? res.json() : Promise.reject(new Error('Failed to scan pages')))
+        .then(data => {
+          setDetectedPages([...data.pages || [], ...data.layouts || []])
+        })
+        .catch(err => {
+          console.error('Failed to scan project pages:', err)
+        })
+        .finally(() => {
+          setIsLoadingPages(false)
+        })
+    }
+  }, [showPageSelector, projectName, detectedPages.length, isLoadingPages])
+
+  // Get the effective page identifier for upload
+  const getPageIdentifier = useCallback((): string | null => {
+    if (customPageName.trim()) {
+      // Custom page name takes priority
+      const name = customPageName.trim()
+      return name.startsWith('/') ? name : `/${name}`
+    }
+    if (selectedPage) {
+      return selectedPage
+    }
+    return null
+  }, [selectedPage, customPageName])
 
   const handleFileUpload = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -165,9 +207,16 @@ export function ReferenceUploader({
       const formData = new FormData()
       formData.append('file', file)
       formData.append('source_type', 'custom')
+
       // Link to redesign session if provided
       if (redesignSessionId) {
         formData.append('redesign_session_id', redesignSessionId.toString())
+      }
+
+      // Add page identifier if specified
+      const pageId = getPageIdentifier()
+      if (pageId) {
+        formData.append('page_identifier', pageId)
       }
 
       const response = await fetch(
@@ -185,6 +234,21 @@ export function ReferenceUploader({
         setZipUploadSuccess(true)
         setZipFilename(file.name)
         onReferenceAdded()
+
+        // Track uploaded page reference if one was created
+        if (data.page_reference_id && pageId) {
+          setUploadedPageRefs(prev => [...prev, {
+            session_id: data.session_id,
+            page_reference_id: data.page_reference_id,
+            page_identifier: pageId,
+            filename: file.name,
+            components_count: components.length,
+          }])
+          // Reset page selection after successful upload
+          setSelectedPage('')
+          setCustomPageName('')
+        }
+
         if (onComponentsUploaded && data.session_id) {
           onComponentsUploaded(components.length, data.session_id)
         }
@@ -197,7 +261,7 @@ export function ReferenceUploader({
     } finally {
       setIsUploadingZip(false)
     }
-  }, [projectName, onReferenceAdded, onComponentsUploaded, redesignSessionId])
+  }, [projectName, onReferenceAdded, onComponentsUploaded, redesignSessionId, getPageIdentifier])
 
   const handleZipDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -265,21 +329,105 @@ export function ReferenceUploader({
         />
       </div>
 
-      {/* ZIP Component Upload Area */}
-      <div
-        className={`
-          border-3 p-6 text-center transition-colors
-          ${zipUploadSuccess
-            ? 'border-[var(--color-neo-success)] bg-[var(--color-neo-success)]/10 border-solid'
-            : isDraggingZip
-              ? 'border-[var(--color-neo-success)] bg-[var(--color-neo-success)]/10 border-dashed'
-              : 'border-[var(--color-neo-border)] bg-[var(--color-neo-bg-alt)] border-dashed'
-          }
-        `}
-        onDragOver={handleZipDragOver}
-        onDragLeave={handleZipDragLeave}
-        onDrop={handleZipDrop}
-      >
+      {/* ZIP Component Upload Area with Page Selector */}
+      <div className="space-y-3">
+        {/* Page Selector Toggle */}
+        <button
+          onClick={() => setShowPageSelector(!showPageSelector)}
+          className="w-full flex items-center justify-between p-3 bg-[var(--color-neo-bg-alt)] border-3 border-[var(--color-neo-border)] hover:border-[var(--color-neo-accent)] transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <MapPin size={18} className="text-[var(--color-neo-accent)]" />
+            <span className="font-display font-bold text-sm">Target Page (Optional)</span>
+            {getPageIdentifier() && (
+              <span className="text-xs bg-[var(--color-neo-accent)] text-white px-2 py-0.5">
+                {getPageIdentifier()}
+              </span>
+            )}
+          </div>
+          {showPageSelector ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+        </button>
+
+        {/* Page Selector Panel */}
+        {showPageSelector && (
+          <div className="p-4 bg-[var(--color-neo-bg-alt)] border-3 border-[var(--color-neo-border)] space-y-3">
+            <p className="text-xs text-[var(--color-neo-muted)]">
+              Specify which page these components are for (e.g., /login, /dashboard).
+              This helps the agent match components to the right features.
+            </p>
+
+            {/* Detected Pages Dropdown */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase">Detected Pages</label>
+              {isLoadingPages ? (
+                <div className="flex items-center gap-2 text-sm text-[var(--color-neo-muted)]">
+                  <Loader2 size={14} className="animate-spin" />
+                  Scanning project...
+                </div>
+              ) : (
+                <select
+                  value={selectedPage}
+                  onChange={e => {
+                    setSelectedPage(e.target.value)
+                    if (e.target.value) setCustomPageName('')
+                  }}
+                  className="neo-input w-full text-sm"
+                >
+                  <option value="">-- Select a page --</option>
+                  {detectedPages.map((page, idx) => (
+                    <option key={idx} value={page.route || page.file_path}>
+                      {page.element_name} ({page.route || page.file_path})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* Custom Page Name Input */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase">Or Enter Custom</label>
+              <input
+                type="text"
+                value={customPageName}
+                onChange={e => {
+                  setCustomPageName(e.target.value)
+                  if (e.target.value) setSelectedPage('')
+                }}
+                placeholder="/login, /dashboard, /settings..."
+                className="neo-input w-full text-sm"
+              />
+            </div>
+
+            {/* Clear Button */}
+            {(selectedPage || customPageName) && (
+              <button
+                onClick={() => {
+                  setSelectedPage('')
+                  setCustomPageName('')
+                }}
+                className="text-xs text-[var(--color-neo-danger)] hover:underline"
+              >
+                Clear selection
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ZIP Upload Drop Zone */}
+        <div
+          className={`
+            border-3 p-6 text-center transition-colors
+            ${zipUploadSuccess
+              ? 'border-[var(--color-neo-success)] bg-[var(--color-neo-success)]/10 border-solid'
+              : isDraggingZip
+                ? 'border-[var(--color-neo-success)] bg-[var(--color-neo-success)]/10 border-dashed'
+                : 'border-[var(--color-neo-border)] bg-[var(--color-neo-bg-alt)] border-dashed'
+            }
+          `}
+          onDragOver={handleZipDragOver}
+          onDragLeave={handleZipDragLeave}
+          onDrop={handleZipDrop}
+        >
         {zipUploadSuccess ? (
           <>
             <CheckCircle2 className="mx-auto mb-3 text-[var(--color-neo-success)]" size={36} />
@@ -338,13 +486,43 @@ export function ReferenceUploader({
             )}
           </>
         )}
-        <input
-          ref={zipInputRef}
-          type="file"
-          accept=".zip"
-          className="hidden"
-          onChange={e => handleZipUpload(e.target.files)}
-        />
+          <input
+            ref={zipInputRef}
+            type="file"
+            accept=".zip"
+            className="hidden"
+            onChange={e => handleZipUpload(e.target.files)}
+          />
+        </div>
+
+        {/* Uploaded Page References List */}
+        {uploadedPageRefs.length > 0 && (
+          <div className="p-3 bg-[var(--color-neo-bg-alt)] border-3 border-[var(--color-neo-border)]">
+            <div className="flex items-center gap-2 mb-2">
+              <MapPin size={16} className="text-[var(--color-neo-accent)]" />
+              <h4 className="font-display font-bold text-xs uppercase">
+                Page-Specific References ({uploadedPageRefs.length})
+              </h4>
+            </div>
+            <div className="space-y-1">
+              {uploadedPageRefs.map((ref, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 p-2 bg-white border-2 border-[var(--color-neo-border)] text-sm"
+                >
+                  <FileArchive size={14} className="text-[var(--color-neo-muted)]" />
+                  <span className="font-medium truncate flex-1">{ref.filename}</span>
+                  <span className="text-xs bg-[var(--color-neo-accent)] text-white px-2 py-0.5">
+                    {ref.page_identifier}
+                  </span>
+                  <span className="text-xs text-[var(--color-neo-muted)]">
+                    {ref.components_count} components
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Uploaded Components List */}

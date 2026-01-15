@@ -507,3 +507,31 @@ export interface RedesignApproval {
   comment: string | null
   approved_at: string | null
 }
+
+// ============================================================================
+// Page Reference Types (for page-specific component references)
+// ============================================================================
+
+export interface DetectedPage {
+  element_type: 'page' | 'layout' | 'component'
+  file_path: string
+  route: string | null
+  element_name: string
+  framework_type: string | null
+}
+
+export interface PageDetectionResult {
+  framework_type: string
+  pages: DetectedPage[]
+  layouts: DetectedPage[]
+  total_pages: number
+  total_layouts: number
+}
+
+export interface UploadedPageReference {
+  session_id: number
+  page_reference_id: number | null
+  page_identifier: string | null
+  filename: string
+  components_count: number
+}

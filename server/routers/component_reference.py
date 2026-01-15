@@ -182,6 +182,9 @@ async def upload_zip(
     source_type: str = Form("custom"),
     source_url: str = Form(None),
     redesign_session_id: Optional[int] = Form(None),
+    page_identifier: Optional[str] = Form(None),
+    display_name: Optional[str] = Form(None),
+    match_keywords: str = Form("[]"),
 ):
     """
     Upload a ZIP file with component code.
@@ -191,7 +194,18 @@ async def upload_zip(
 
     If redesign_session_id is provided, links this component session
     to the redesign session for integrated token extraction.
+
+    If page_identifier is provided (e.g., "/login", "/dashboard"), creates
+    a PageReference linking these components to that specific page.
+    This enables page-specific component matching during feature implementation.
     """
+    import json as json_lib
+
+    # Parse match_keywords
+    try:
+        keywords = json_lib.loads(match_keywords) if match_keywords else []
+    except json_lib.JSONDecodeError:
+        keywords = []
     # Validate file type first
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="File must be a ZIP archive")
@@ -205,14 +219,31 @@ async def upload_zip(
     with get_db_session(project_dir) as db:
         service = ComponentReferenceService(db, project_dir)
 
-        # Check or create session
-        session = await service.get_active_session(project_name)
-        if not session:
-            session = await service.create_session(
-                project_name,
+        page_ref = None
+
+        # If page_identifier is provided, create session with page reference
+        if page_identifier:
+            # Ensure page_identifier starts with /
+            if not page_identifier.startswith("/"):
+                page_identifier = "/" + page_identifier
+
+            session, page_ref = await service.create_session_for_page(
+                project_name=project_name,
+                page_identifier=page_identifier,
                 source_type=source_type,
                 source_url=source_url,
+                display_name=display_name,
+                match_keywords=keywords if keywords else None,
             )
+        else:
+            # Standard flow: check or create session
+            session = await service.get_active_session(project_name)
+            if not session:
+                session = await service.create_session(
+                    project_name,
+                    source_type=source_type,
+                    source_url=source_url,
+                )
 
         if session.status != "uploading":
             raise HTTPException(
@@ -235,7 +266,7 @@ async def upload_zip(
                     redesign_session_id,
                 )
 
-            return {
+            response = {
                 "status": "ok",
                 "session_id": session.id,
                 "components_count": len(session.components or []),
@@ -250,6 +281,14 @@ async def upload_zip(
                     for c in (session.components or [])
                 ],
             }
+
+            # Include page reference info if created
+            if page_ref:
+                response["page_reference_id"] = page_ref.id
+                response["page_identifier"] = page_identifier
+                response["filename"] = file.filename
+
+            return response
         except Exception as e:
             logger.error(f"ZIP parsing failed: {e}")
             raise HTTPException(status_code=500, detail=str(e))
