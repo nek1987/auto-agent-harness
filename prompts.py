@@ -316,6 +316,11 @@ def get_regression_prompt(project_dir: Path | None = None) -> str:
     return load_prompt("regression_prompt", project_dir, mode="testing")
 
 
+def get_redesign_prompt(project_dir: Path | None = None) -> str:
+    """Load the redesign planner prompt with skills context (project-specific if available)."""
+    return load_prompt("redesign_prompt", project_dir, mode="redesign")
+
+
 def get_app_spec(project_dir: Path) -> str:
     """
     Load the app spec from the project.

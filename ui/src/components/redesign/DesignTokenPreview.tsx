@@ -14,12 +14,12 @@ export function DesignTokenPreview({
     return (
       <div className="text-center py-12">
         <Loader2 className="animate-spin mx-auto mb-4" size={48} />
-        <h3 className="font-display font-bold mb-2">
-          Extracting Design Tokens...
-        </h3>
-        <p className="text-[var(--color-neo-muted)] text-sm">
-          Claude Vision API is analyzing your references
-        </p>
+      <h3 className="font-display font-bold mb-2">
+        Analyzing Design Tokens...
+      </h3>
+      <p className="text-[var(--color-neo-muted)] text-sm">
+        The redesign planner is reviewing your references
+      </p>
       </div>
     )
   }
@@ -28,12 +28,12 @@ export function DesignTokenPreview({
     return (
       <div className="text-center py-12">
         <Palette className="mx-auto mb-4 text-[var(--color-neo-muted)]" size={48} />
-        <h3 className="font-display font-bold mb-2">
-          No Tokens Extracted Yet
-        </h3>
-        <p className="text-[var(--color-neo-muted)] text-sm">
-          Add references and click "Extract Tokens" to begin
-        </p>
+      <h3 className="font-display font-bold mb-2">
+        No Tokens Extracted Yet
+      </h3>
+      <p className="text-[var(--color-neo-muted)] text-sm">
+        Run the redesign planner to extract tokens from your references
+      </p>
       </div>
     )
   }

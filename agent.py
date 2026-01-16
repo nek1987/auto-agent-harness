@@ -33,6 +33,7 @@ from prompts import (
     get_coding_prompt_yolo,
     get_initializer_prompt,
     get_regression_prompt,
+    get_redesign_prompt,
     load_prompt,
 )
 from lib import (
@@ -50,10 +51,59 @@ logger = logging.getLogger(__name__)
 AUTO_CONTINUE_DELAY_SECONDS = 3
 
 
+async def _make_multimodal_message(content_blocks: list[dict]):
+    """Create an async generator that yields a multimodal message for Claude SDK."""
+    yield {
+        "type": "user",
+        "message": {"role": "user", "content": content_blocks},
+        "parent_tool_use_id": None,
+        "session_id": "default",
+    }
+
+
+def _load_redesign_context(project_dir: Path) -> dict:
+    """Load active redesign session context and references from the database."""
+    try:
+        from api.database import RedesignSession, create_database
+    except Exception as exc:
+        logger.warning(f"Failed to import redesign models: {exc}")
+        return {}
+
+    try:
+        _, SessionLocal = create_database(project_dir)
+        db_session = SessionLocal()
+    except Exception as exc:
+        logger.warning(f"Failed to open redesign database: {exc}")
+        return {}
+
+    try:
+        session = (
+            db_session.query(RedesignSession)
+            .filter(
+                RedesignSession.project_name == project_dir.name,
+                RedesignSession.status != "complete",
+                RedesignSession.status != "failed",
+            )
+            .order_by(RedesignSession.created_at.desc())
+            .first()
+        )
+        if not session:
+            return {}
+
+        return {
+            "session_id": session.id,
+            "references": session.references or [],
+            "component_session_id": session.component_session_id,
+        }
+    finally:
+        db_session.close()
+
+
 async def run_agent_session(
     client: ClaudeSDKClient,
     message: str,
     project_dir: Path,
+    attachments: list[dict] | None = None,
 ) -> tuple[str, str, Optional[ErrorInfo]]:
     """
     Run a single agent session using Claude Agent SDK.
@@ -72,8 +122,23 @@ async def run_agent_session(
     print("Sending prompt to Claude Agent SDK...\n")
 
     try:
-        # Send the query
-        await client.query(message)
+        # Send the query (multimodal if attachments provided)
+        if attachments:
+            content_blocks: list[dict] = []
+            if message:
+                content_blocks.append({"type": "text", "text": message})
+            for attachment in attachments:
+                content_blocks.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": attachment["media_type"],
+                        "data": attachment["data"],
+                    },
+                })
+            await client.query(_make_multimodal_message(content_blocks))
+        else:
+            await client.query(message)
 
         # Collect response text and show tool use
         response_text = ""
@@ -180,6 +245,8 @@ async def run_autonomous_agent(
         print("Mode: Analysis (scanning existing project)")
     elif mode == "regression":
         print("Mode: Regression (verification only)")
+    elif mode == "redesign":
+        print("Mode: Redesign (planning redesign tasks)")
     elif yolo_mode:
         print("Mode: YOLO (testing disabled)")
     else:
@@ -218,6 +285,7 @@ async def run_autonomous_agent(
         is_first_run = False
         is_analysis_mode = True
         is_regression_mode = False
+        is_redesign_mode = False
     elif mode == "regression":
         print("=" * 70)
         print("  REGRESSION MODE")
@@ -227,11 +295,25 @@ async def run_autonomous_agent(
         is_first_run = False
         is_analysis_mode = False
         is_regression_mode = True
+        is_redesign_mode = False
+        if max_iterations is None:
+            max_iterations = 1
+    elif mode == "redesign":
+        print("=" * 70)
+        print("  REDESIGN MODE")
+        print("  Planning page-based redesign tasks")
+        print("=" * 70)
+        print()
+        is_first_run = False
+        is_analysis_mode = False
+        is_regression_mode = False
+        is_redesign_mode = True
         if max_iterations is None:
             max_iterations = 1
     else:
         is_analysis_mode = False
         is_regression_mode = False
+        is_redesign_mode = False
         # Check if this is a fresh start or continuation
         # Uses has_features() which checks if the database actually has features,
         # not just if the file exists (empty db should still trigger initializer)
@@ -284,6 +366,8 @@ async def run_autonomous_agent(
                 max_iterations = 1
         elif is_regression_mode:
             prompt = get_regression_prompt(project_dir)
+        elif is_redesign_mode:
+            prompt = get_redesign_prompt(project_dir)
         elif is_first_run:
             prompt = get_initializer_prompt(project_dir)
             is_first_run = False  # Only use initializer once
@@ -296,7 +380,49 @@ async def run_autonomous_agent(
 
         # Run session with async context manager
         async with client:
-            status, response, error_info = await run_agent_session(client, prompt, project_dir)
+            if is_redesign_mode:
+                redesign_context = _load_redesign_context(project_dir)
+                references = redesign_context.get("references", [])
+                session_id = redesign_context.get("session_id")
+                component_session_id = redesign_context.get("component_session_id")
+
+                summary_lines = []
+                if session_id:
+                    summary_lines.append(f"Redesign session: {session_id}")
+                if component_session_id:
+                    summary_lines.append(f"Component reference session: {component_session_id}")
+                if references:
+                    summary_lines.append("References:")
+                    for idx, ref in enumerate(references, start=1):
+                        ref_type = ref.get("type", "unknown")
+                        meta = ref.get("metadata", {}) or {}
+                        label = meta.get("filename") or meta.get("original_url") or ref.get("data", "reference")
+                        summary_lines.append(f"- {idx}. {ref_type}: {label}")
+
+                if summary_lines:
+                    prompt = f"{prompt}\n\n## Redesign Session Context\n" + "\n".join(summary_lines)
+
+                attachments = []
+                for ref in references:
+                    if ref.get("type") != "image":
+                        continue
+                    data = ref.get("data")
+                    if not data:
+                        continue
+                    meta = ref.get("metadata", {}) or {}
+                    media_type = meta.get("content_type") or "image/png"
+                    attachments.append({"media_type": media_type, "data": data})
+                    if len(attachments) >= 4:
+                        break
+
+                status, response, error_info = await run_agent_session(
+                    client,
+                    prompt,
+                    project_dir,
+                    attachments=attachments if attachments else None,
+                )
+            else:
+                status, response, error_info = await run_agent_session(client, prompt, project_dir)
 
         # Handle status
         if status == "continue":

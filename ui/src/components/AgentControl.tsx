@@ -91,6 +91,13 @@ export function AgentControl({ projectName, status, yoloMode = false, mode, last
               </span>
             </div>
           )}
+          {mode === 'redesign' && (
+            <div className="flex items-center gap-1 px-2 py-1 bg-[var(--color-neo-accent)] border-3 border-[var(--color-neo-border)]">
+              <span className="font-display font-bold text-xs uppercase text-white">
+                Redesign
+              </span>
+            </div>
+          )}
           {mode !== 'regression' && yoloMode && (
             <div className="flex items-center gap-1 px-2 py-1 bg-[var(--color-neo-pending)] border-3 border-[var(--color-neo-border)]">
               <Zap size={14} className="text-yellow-900" />

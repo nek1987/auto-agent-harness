@@ -104,11 +104,14 @@ FEATURE_MCP_TOOLS = [
 # so redesign_get_next is no longer needed - agent gets redesign via feature_get_next
 REDESIGN_MCP_TOOLS = [
     "mcp__redesign__redesign_get_status",
+    "mcp__redesign__redesign_get_references",
     "mcp__redesign__redesign_start_session",
     "mcp__redesign__redesign_add_image_reference",
     "mcp__redesign__redesign_add_url_reference",
     "mcp__redesign__redesign_extract_tokens",
+    "mcp__redesign__redesign_save_tokens",
     "mcp__redesign__redesign_generate_plan",
+    "mcp__redesign__redesign_save_plan",
     "mcp__redesign__redesign_check_approval",
     "mcp__redesign__redesign_apply_changes",
     "mcp__redesign__redesign_take_screenshot",
@@ -123,6 +126,7 @@ COMPONENT_REF_MCP_TOOLS = [
     "mcp__component_ref__component_ref_get_status",
     "mcp__component_ref__component_ref_start_session",
     "mcp__component_ref__component_ref_add_components",
+    "mcp__component_ref__component_ref_get_components",
     "mcp__component_ref__component_ref_analyze",
     "mcp__component_ref__component_ref_get_analysis",
     "mcp__component_ref__component_ref_generate_plan",

@@ -38,13 +38,15 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [uploadedComponentsCount, setUploadedComponentsCount] = useState(0)
   const [isStartingAgent, setIsStartingAgent] = useState(false)
+  const [isStartingPlanner, setIsStartingPlanner] = useState(false)
+  const [plannerTriggered, setPlannerTriggered] = useState(false)
 
   // Load existing session on mount
   useEffect(() => {
     loadSession()
   }, [projectName])
 
-  const loadSession = async () => {
+  const loadSession = async (preferTokens = false) => {
     setIsLoading(true)
     setError(null)
     try {
@@ -52,14 +54,25 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
       if (response.ok) {
         const data = await response.json()
         setSession(data)
-        // Set step based on session status
-        if (data.status === 'collecting') setCurrentStep('references')
-        else if (data.status === 'extracting' || data.status === 'planning') setCurrentStep('tokens')
-        else if (data.status === 'approving') setCurrentStep('plan')
-        else if (data.status === 'implementing' || data.status === 'verifying') setCurrentStep('implementing')
+        // Set step based on session data
+        if (data.status === 'implementing' || data.status === 'verifying') {
+          setCurrentStep('implementing')
+        } else if (data.change_plan) {
+          setCurrentStep('plan')
+          setPlannerTriggered(false)
+        } else if (data.extracted_tokens) {
+          setCurrentStep('tokens')
+          setPlannerTriggered(false)
+        } else if (preferTokens || plannerTriggered) {
+          setCurrentStep('tokens')
+        } else {
+          setCurrentStep('references')
+        }
       } else if (response.status === 404) {
         // No active session, start fresh
         setSession(null)
+        setPlannerTriggered(false)
+        setCurrentStep('references')
       }
     } catch (err) {
       console.error('Failed to load session:', err)
@@ -78,6 +91,8 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
       if (response.ok) {
         const data = await response.json()
         setSession(data)
+        setCurrentStep('references')
+        setPlannerTriggered(false)
       } else {
         const err = await response.json()
         setError(err.detail || 'Failed to start session')
@@ -89,54 +104,29 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
     }
   }
 
-  const extractTokens = async () => {
-    if (!session) return
-    setIsProcessing(true)
+  const startPlannerAgent = async () => {
+    setIsStartingPlanner(true)
+    setPlannerTriggered(true)
     setError(null)
     try {
-      const response = await fetch(`/api/projects/${projectName}/redesign/extract-tokens`, {
+      const response = await fetch(`/api/projects/${projectName}/agent/start`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ yolo_mode: true, mode: 'redesign' }),
       })
       if (response.ok) {
-        const data = await response.json()
-        setSession(prev => prev ? { ...prev, extracted_tokens: data.tokens, status: 'planning' } : null)
         setCurrentStep('tokens')
+        await loadSession(true)
       } else {
         const err = await response.json()
-        setError(err.detail || 'Failed to extract tokens')
+        setPlannerTriggered(false)
+        setError(err.detail || 'Failed to start redesign planner')
       }
     } catch (err) {
-      setError('Failed to extract tokens')
+      setPlannerTriggered(false)
+      setError('Failed to start redesign planner')
     } finally {
-      setIsProcessing(false)
-    }
-  }
-
-  const generatePlan = async () => {
-    if (!session) return
-    setIsProcessing(true)
-    setError(null)
-    try {
-      const response = await fetch(`/api/projects/${projectName}/redesign/generate-plan`, {
-        method: 'POST',
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setSession(prev => prev ? {
-          ...prev,
-          change_plan: data.plan,
-          framework_detected: data.framework,
-          status: 'approving'
-        } : null)
-        setCurrentStep('plan')
-      } else {
-        const err = await response.json()
-        setError(err.detail || 'Failed to generate plan')
-      }
-    } catch (err) {
-      setError('Failed to generate plan')
-    } finally {
-      setIsProcessing(false)
+      setIsStartingPlanner(false)
     }
   }
 
@@ -213,11 +203,11 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
     if (currentStep === 'references') {
       // Can proceed if we have image references OR uploaded components
       const hasReferences = session?.references && session.references.length > 0
-      const hasComponents = uploadedComponentsCount > 0
+      const hasComponents = uploadedComponentsCount > 0 || !!session?.component_session_id
       return hasReferences || hasComponents
     }
     if (currentStep === 'tokens') {
-      return session?.extracted_tokens !== null
+      return !!session?.change_plan
     }
     if (currentStep === 'plan') {
       return session?.change_plan !== null
@@ -227,9 +217,9 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
 
   const handleNext = async () => {
     if (currentStep === 'references' && canProceed()) {
-      await extractTokens()
-    } else if (currentStep === 'tokens' && session?.extracted_tokens) {
-      await generatePlan()
+      await startPlannerAgent()
+    } else if (currentStep === 'tokens' && session?.change_plan) {
+      setCurrentStep('plan')
     } else if (currentStep === 'plan') {
       setCurrentStep('implementing')
     }
@@ -321,8 +311,8 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
                 Start a New Redesign Session
               </h3>
               <p className="text-[var(--color-neo-muted)] mb-6 max-w-md mx-auto">
-                Upload reference images or URLs, and let AI extract design tokens
-                to transform your project's design system.
+                Upload reference images, URLs, or component ZIPs, then run the
+                redesign planner to create the new design system.
               </p>
               <button
                 onClick={startSession}
@@ -352,19 +342,41 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
 
           {/* Step 2: Design Tokens */}
           {session && currentStep === 'tokens' && (
-            <DesignTokenPreview
-              tokens={session.extracted_tokens}
-              isExtracting={session.status === 'extracting'}
-            />
+            <div className="space-y-4">
+              <div className="flex justify-end">
+                <button
+                  onClick={loadSession}
+                  disabled={isProcessing}
+                  className="neo-btn neo-btn-ghost"
+                >
+                  Refresh
+                </button>
+              </div>
+              <DesignTokenPreview
+                tokens={session.extracted_tokens}
+                isExtracting={plannerTriggered && !session.extracted_tokens}
+              />
+            </div>
           )}
 
           {/* Step 3: Change Plan */}
           {session && currentStep === 'plan' && (
-            <ChangePlanViewer
-              plan={session.change_plan}
-              framework={session.framework_detected}
-              onApprovePhase={approvePhase}
-            />
+            <div className="space-y-4">
+              <div className="flex justify-end">
+                <button
+                  onClick={loadSession}
+                  disabled={isProcessing}
+                  className="neo-btn neo-btn-ghost"
+                >
+                  Refresh
+                </button>
+              </div>
+              <ChangePlanViewer
+                plan={session.change_plan}
+                framework={session.framework_detected}
+                onApprovePhase={approvePhase}
+              />
+            </div>
           )}
 
           {/* Step 4: Implementation */}
@@ -375,7 +387,7 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
                 Ready for Implementation
               </h3>
               <p className="text-[var(--color-neo-muted)] mb-6 max-w-md mx-auto">
-                The agent will now apply the design tokens to your project.
+                The agent will now apply the redesign tasks created by the planner.
                 Start the agent to begin implementation.
               </p>
               <div className="flex items-center justify-center gap-4">
@@ -430,19 +442,19 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
             {session && currentStep !== 'implementing' && (
               <button
                 onClick={handleNext}
-                disabled={!canProceed() || isProcessing}
+                disabled={!canProceed() || isProcessing || isStartingPlanner}
                 className="neo-btn neo-btn-primary"
               >
-                {isProcessing ? (
+                {isProcessing || isStartingPlanner ? (
                   <Loader2 className="animate-spin" size={18} />
                 ) : currentStep === 'references' ? (
                   <>
-                    Extract Tokens
+                    Run Planner
                     <ChevronRight size={18} />
                   </>
                 ) : currentStep === 'tokens' ? (
                   <>
-                    Generate Plan
+                    Review Plan
                     <ChevronRight size={18} />
                   </>
                 ) : (

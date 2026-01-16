@@ -8,8 +8,8 @@ phases with user approval gates.
 
 This service manages the full redesign workflow:
 1. Reference collection (images, URLs, Figma)
-2. Design token extraction via Claude Vision API
-3. Change plan generation
+2. Design token extraction via redesign planner agent
+3. Change plan generation via redesign planner agent
 4. Phase-by-phase implementation with approvals
 5. Verification with visual comparison
 """
@@ -30,7 +30,6 @@ from sqlalchemy.orm import Session
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from api.database import RedesignSession, RedesignApproval
-from server.services.screenshot_service import get_screenshot_service
 
 logger = logging.getLogger(__name__)
 
@@ -134,17 +133,11 @@ class RedesignService:
         if session.status != "collecting":
             raise ValueError(f"Cannot add references in status: {session.status}")
 
-        # Process URL references by taking screenshot
+        # Store URL references without server-side screenshots
         processed_data = data
         if ref_type == "url":
-            screenshot_service = get_screenshot_service()
-            try:
-                processed_data = await screenshot_service.capture_url_as_base64(data)
-                metadata = metadata or {}
-                metadata["original_url"] = data
-            except Exception as e:
-                logger.error(f"Failed to capture URL {data}: {e}")
-                raise ValueError(f"Failed to capture URL: {e}")
+            metadata = metadata or {}
+            metadata.setdefault("original_url", data)
 
         # Add reference
         references = session.references or []
@@ -167,9 +160,11 @@ class RedesignService:
         """
         Extract design tokens from session references using Claude Vision.
 
+        Deprecated: token extraction is now handled by the redesign planner agent.
+
         Supports extraction from:
         - Image references (PNG, JPG, WebP via Vision API)
-        - URL references (screenshots via Vision API)
+        - URL references (stored for agent-side inspection)
         - Component code (via linked ComponentReferenceSession)
 
         Args:
@@ -181,6 +176,14 @@ class RedesignService:
         session = await self.get_session(session_id)
         if not session:
             raise ValueError(f"Session {session_id} not found")
+
+        if session.extracted_tokens:
+            return session
+
+        raise RuntimeError(
+            "Token extraction is now handled by the redesign planner agent. "
+            "Start the agent in redesign mode to save tokens."
+        )
 
         # Check for both references AND linked component session
         has_references = session.references and len(session.references) > 0
@@ -477,6 +480,8 @@ Component code to analyze:
         """
         Generate an implementation plan based on extracted tokens.
 
+        Deprecated: plan generation is now handled by the redesign planner agent.
+
         Args:
             session_id: ID of the redesign session
 
@@ -486,6 +491,14 @@ Component code to analyze:
         session = await self.get_session(session_id)
         if not session:
             raise ValueError(f"Session {session_id} not found")
+
+        if session.change_plan:
+            return session
+
+        raise RuntimeError(
+            "Plan generation is now handled by the redesign planner agent. "
+            "Start the agent in redesign mode to save the plan."
+        )
 
         if not session.extracted_tokens:
             raise ValueError("No tokens extracted yet")

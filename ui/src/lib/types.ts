@@ -486,6 +486,21 @@ export interface ChangePlan {
   phases: PlanPhase[]
 }
 
+export interface RedesignPagePlanPage {
+  route: string
+  priority: number
+  reference?: string
+  notes?: string
+}
+
+export interface RedesignPagePlan {
+  plan_type?: 'page_redesign'
+  design_system_file: string
+  pages: RedesignPagePlanPage[]
+}
+
+export type RedesignPlan = ChangePlan | RedesignPagePlan
+
 export interface RedesignSession {
   id: number
   project_name: string
@@ -493,7 +508,7 @@ export interface RedesignSession {
   current_phase: RedesignPhase | null
   references: RedesignReference[] | null
   extracted_tokens: DesignTokens | null
-  change_plan: ChangePlan | null
+  change_plan: RedesignPlan | null
   framework_detected: string | null
   error_message: string | null
   component_session_id: number | null

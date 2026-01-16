@@ -7,12 +7,12 @@ import {
   File,
   Loader2,
 } from 'lucide-react'
-import type { ChangePlan, PlanPhase } from '../../lib/types'
+import type { ChangePlan, PlanPhase, RedesignPlan, RedesignPagePlan } from '../../lib/types'
 
 interface ChangePlanViewerProps {
-  plan: ChangePlan | null
+  plan: RedesignPlan | null
   framework: string | null
-  onApprovePhase: (phase: string) => Promise<void>
+  onApprovePhase?: (phase: string) => Promise<void>
 }
 
 export function ChangePlanViewer({
@@ -31,11 +31,14 @@ export function ChangePlanViewer({
           No Plan Generated Yet
         </h3>
         <p className="text-[var(--color-neo-muted)] text-sm">
-          Extract tokens first, then generate an implementation plan
+          Run the redesign planner to generate the page plan
         </p>
       </div>
     )
   }
+
+  const isPagePlan = (candidate: RedesignPlan): candidate is RedesignPagePlan =>
+    Array.isArray((candidate as RedesignPagePlan).pages)
 
   const togglePhase = (phaseName: string) => {
     setExpandedPhases(prev => {
@@ -50,6 +53,7 @@ export function ChangePlanViewer({
   }
 
   const handleApprove = async (phaseName: string) => {
+    if (!onApprovePhase) return
     setApprovingPhase(phaseName)
     try {
       await onApprovePhase(phaseName)
@@ -57,6 +61,59 @@ export function ChangePlanViewer({
       setApprovingPhase(null)
     }
   }
+
+  if (isPagePlan(plan)) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4 p-4 bg-[var(--color-neo-bg-alt)] border-3 border-[var(--color-neo-border)]">
+          <div>
+            <span className="text-xs uppercase text-[var(--color-neo-muted)]">
+              Design System
+            </span>
+            <p className="font-display font-bold">{plan.design_system_file}</p>
+          </div>
+          <div className="ml-auto">
+            <span className="text-xs uppercase text-[var(--color-neo-muted)]">
+              Pages
+            </span>
+            <p className="font-display font-bold">{plan.pages.length}</p>
+          </div>
+        </div>
+
+        <div>
+          <h4 className="font-display font-bold uppercase text-sm mb-3">
+            Page Redesign Plan
+          </h4>
+          <div className="space-y-3">
+            {plan.pages.map((page, idx) => (
+              <div key={`${page.route}-${idx}`} className="border-3 border-[var(--color-neo-border)] bg-white p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="flex items-center justify-center w-8 h-8 bg-[var(--color-neo-accent)] text-white font-display font-bold">
+                    {page.priority}
+                  </span>
+                  <div className="flex-1">
+                    <h5 className="font-display font-bold">{page.route}</h5>
+                    {page.reference && (
+                      <p className="text-xs text-[var(--color-neo-muted)]">
+                        Reference: {page.reference}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {page.notes && (
+                  <p className="text-sm text-[var(--color-neo-muted)]">
+                    {page.notes}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const changePlan = plan as ChangePlan
 
   return (
     <div className="space-y-6">
@@ -72,18 +129,18 @@ export function ChangePlanViewer({
           <span className="text-xs uppercase text-[var(--color-neo-muted)]">
             Output Format
           </span>
-          <p className="font-display font-bold">{plan.output_format}</p>
+          <p className="font-display font-bold">{changePlan.output_format}</p>
         </div>
       </div>
 
       {/* Phases */}
       <div>
         <h4 className="font-display font-bold uppercase text-sm mb-3">
-          Implementation Phases ({plan.phases.length})
+          Implementation Phases ({changePlan.phases.length})
         </h4>
 
         <div className="space-y-3">
-          {plan.phases.map((phase, idx) => (
+          {changePlan.phases.map((phase, idx) => (
             <PhaseCard
               key={phase.name}
               phase={phase}
@@ -104,12 +161,12 @@ export function ChangePlanViewer({
         </h4>
         <ul className="text-sm text-[var(--color-neo-muted)] space-y-1">
           <li>
-            Total phases: <strong>{plan.phases.length}</strong>
+            Total phases: <strong>{changePlan.phases.length}</strong>
           </li>
           <li>
             Total files to modify:{' '}
             <strong>
-              {plan.phases.reduce((acc, p) => acc + p.files.length, 0)}
+              {changePlan.phases.reduce((acc, p) => acc + p.files.length, 0)}
             </strong>
           </li>
           <li>

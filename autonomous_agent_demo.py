@@ -110,7 +110,7 @@ Authentication:
         "--mode",
         type=str,
         default=None,
-        choices=["initializer", "coding", "analysis", "regression"],
+        choices=["initializer", "coding", "analysis", "regression", "redesign"],
         help="Force specific agent mode (default: auto-detect based on features.db)",
     )
 

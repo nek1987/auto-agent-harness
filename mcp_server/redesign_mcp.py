@@ -10,9 +10,11 @@ Tools:
 - redesign_get_status: Get current redesign session status
 - redesign_start_session: Initialize a new redesign session
 - redesign_add_image_reference: Add image reference (base64)
-- redesign_add_url_reference: Add URL reference (will be screenshotted)
-- redesign_extract_tokens: Extract design tokens from references
-- redesign_generate_plan: Generate implementation plan
+- redesign_add_url_reference: Add URL reference (stored only)
+- redesign_extract_tokens: Deprecated (planner handles extraction)
+- redesign_save_tokens: Save design tokens from planner
+- redesign_save_plan: Save plan from planner
+- redesign_generate_plan: Deprecated (planner handles planning)
 - redesign_check_approval: Check if a phase is approved
 - redesign_apply_changes: Apply token changes to files
 - redesign_take_screenshot: Capture screenshot for verification
@@ -189,6 +191,43 @@ def redesign_get_status() -> str:
 
 
 @mcp.tool()
+def redesign_get_references() -> str:
+    """Get the raw references for the active redesign session.
+
+    Returns the stored references (image base64 or URL strings) plus metadata.
+    """
+    project_name = PROJECT_DIR.name
+
+    db_session = get_session()
+    try:
+        session = (
+            db_session.query(RedesignSession)
+            .filter(
+                RedesignSession.project_name == project_name,
+                RedesignSession.status != "complete",
+                RedesignSession.status != "failed",
+            )
+            .order_by(RedesignSession.created_at.desc())
+            .first()
+        )
+
+        if not session:
+            return json.dumps({
+                "has_session": False,
+                "references": [],
+                "message": "No active redesign session."
+            })
+
+        return json.dumps({
+            "has_session": True,
+            "session_id": session.id,
+            "references": session.references or [],
+        }, indent=2)
+    finally:
+        db_session.close()
+
+
+@mcp.tool()
 def redesign_start_session() -> str:
     """Start a new redesign session for the current project.
 
@@ -309,7 +348,7 @@ def redesign_add_url_reference(
 ) -> str:
     """Add a URL reference to the active redesign session.
 
-    The URL will be visited and a screenshot will be captured.
+    Stores the URL for agent-side inspection (no server-side screenshot).
     Use this to reference existing websites or live designs.
 
     Args:
@@ -336,24 +375,11 @@ def redesign_add_url_reference(
                 "error": "No active session in 'collecting' status. Start a new session first."
             })
 
-        # Capture screenshot
-        try:
-            screenshot_svc = asyncio.get_event_loop().run_until_complete(
-                get_screenshot_service()
-            )
-            image_base64 = asyncio.get_event_loop().run_until_complete(
-                screenshot_svc.capture_url_as_base64(url)
-            )
-        except Exception as e:
-            return json.dumps({
-                "error": f"Failed to capture URL: {str(e)}"
-            })
-
         # Add reference
         references = session.references or []
         references.append({
             "type": "url",
-            "data": image_base64,
+            "data": url,
             "metadata": {
                 "original_url": url,
                 "added_at": datetime.utcnow().isoformat(),
@@ -367,7 +393,7 @@ def redesign_add_url_reference(
         return json.dumps({
             "success": True,
             "references_count": len(references),
-            "message": f"Captured and added URL reference from '{url}'. Total references: {len(references)}"
+            "message": f"Added URL reference '{url}'. Total references: {len(references)}"
         })
     finally:
         db_session.close()
@@ -397,62 +423,102 @@ def redesign_extract_tokens() -> str:
             db_session.query(RedesignSession)
             .filter(
                 RedesignSession.project_name == project_name,
-                RedesignSession.status == "collecting",
+                RedesignSession.status != "complete",
+                RedesignSession.status != "failed",
             )
+            .order_by(RedesignSession.created_at.desc())
             .first()
         )
 
         if not session:
             return json.dumps({
-                "error": "No active session in 'collecting' status."
+                "error": "No active redesign session."
             })
 
-        if not session.references or len(session.references) == 0:
-            return json.dumps({
-                "error": "No references added. Add at least one reference before extracting tokens."
-            })
-
-        # Update status
-        session.status = "extracting"
-        session.current_phase = "tokens"
-        db_session.commit()
-
-        try:
-            # Extract tokens from each image reference
-            all_tokens = []
-            client = get_anthropic_client()
-
-            for ref in session.references:
-                if ref["type"] in ("image", "url"):
-                    tokens = _extract_tokens_from_image(client, ref["data"])
-                    all_tokens.append(tokens)
-
-            # Merge tokens
-            merged_tokens = _merge_tokens(all_tokens)
-
-            # Normalize tokens
-            normalized = _normalize_tokens(merged_tokens)
-
-            # Update session
-            session.extracted_tokens = normalized
-            session.status = "planning"
-            session.updated_at = datetime.utcnow()
-            db_session.commit()
-
+        if session.extracted_tokens:
             return json.dumps({
                 "success": True,
-                "tokens": normalized,
-                "message": "Design tokens extracted successfully. Use redesign_generate_plan to create implementation plan."
+                "tokens": session.extracted_tokens,
+                "message": "Tokens already saved by redesign planner."
             }, indent=2)
 
-        except Exception as e:
-            session.status = "failed"
-            session.error_message = str(e)
-            db_session.commit()
-            return json.dumps({
-                "error": f"Token extraction failed: {str(e)}"
-            })
+        return json.dumps({
+            "error": "This tool is deprecated. Use the redesign planner agent and redesign_save_tokens."
+        })
+    finally:
+        db_session.close()
 
+
+@mcp.tool()
+def redesign_save_tokens(
+    tokens: Annotated[dict, Field(description="Design tokens JSON object")],
+) -> str:
+    """Save design tokens produced by the redesign planner agent."""
+    project_name = PROJECT_DIR.name
+
+    db_session = get_session()
+    try:
+        session = (
+            db_session.query(RedesignSession)
+            .filter(
+                RedesignSession.project_name == project_name,
+                RedesignSession.status != "complete",
+                RedesignSession.status != "failed",
+            )
+            .order_by(RedesignSession.created_at.desc())
+            .first()
+        )
+
+        if not session:
+            return json.dumps({"error": "No active redesign session."})
+
+        session.extracted_tokens = tokens
+        session.status = "planning"
+        session.current_phase = "tokens"
+        session.updated_at = datetime.utcnow()
+        db_session.commit()
+
+        return json.dumps({
+            "success": True,
+            "message": "Design tokens saved.",
+        })
+    finally:
+        db_session.close()
+
+
+@mcp.tool()
+def redesign_save_plan(
+    plan: Annotated[dict, Field(description="Redesign plan JSON object")],
+) -> str:
+    """Save a redesign plan produced by the planner agent."""
+    project_name = PROJECT_DIR.name
+
+    db_session = get_session()
+    try:
+        session = (
+            db_session.query(RedesignSession)
+            .filter(
+                RedesignSession.project_name == project_name,
+                RedesignSession.status != "complete",
+                RedesignSession.status != "failed",
+            )
+            .order_by(RedesignSession.created_at.desc())
+            .first()
+        )
+
+        if not session:
+            return json.dumps({"error": "No active redesign session."})
+
+        session.change_plan = plan
+        session.status = "approving"
+        session.current_phase = "plan"
+        session.updated_at = datetime.utcnow()
+        db_session.commit()
+
+        return json.dumps({
+            "success": True,
+            "message": "Redesign plan saved.",
+        })
     finally:
         db_session.close()
 
@@ -825,6 +891,11 @@ def redesign_apply_changes(
         if not session.change_plan:
             return json.dumps({
                 "error": "No change plan generated."
+            })
+
+        if "phases" not in session.change_plan:
+            return json.dumps({
+                "error": "Plan is page-based. Use feature tasks instead of redesign_apply_changes."
             })
 
         # Find the phase in the plan

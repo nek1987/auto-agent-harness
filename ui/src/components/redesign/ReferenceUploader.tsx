@@ -186,7 +186,7 @@ export function ReferenceUploader({
         onReferenceAdded()
       } else {
         const err = await response.json()
-        setError(err.detail || 'Failed to capture URL')
+        setError(err.detail || 'Failed to add URL reference')
       }
     } catch (err) {
       setError('Failed to add URL reference')

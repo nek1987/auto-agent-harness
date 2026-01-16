@@ -12,6 +12,7 @@ this works with actual code files to extract patterns and structures.
 
 Tools:
 - component_ref_get_status: Get current session status
+- component_ref_get_components: Get components with optional content
 - component_ref_start_session: Initialize a new session
 - component_ref_add_components: Add component files from ZIP
 - component_ref_analyze: Analyze components with Claude
@@ -244,6 +245,69 @@ def component_ref_get_status() -> str:
             response["error_message"] = session.error_message
 
         return json.dumps(response, indent=2)
+    finally:
+        db_session.close()
+
+
+@mcp.tool()
+def component_ref_get_components(
+    include_content: Annotated[bool, Field(description="Include component code content")] = True,
+    max_components: Annotated[int, Field(description="Maximum number of components to return")] = 10,
+    max_chars: Annotated[int, Field(description="Max characters per component content")] = 2000,
+) -> str:
+    """Get components from the active component reference session.
+
+    Returns component metadata and (optionally) truncated code content.
+    """
+    project_name = PROJECT_DIR.name
+
+    db_session = get_session()
+    try:
+        session = (
+            db_session.query(ComponentReferenceSession)
+            .filter(
+                ComponentReferenceSession.project_name == project_name,
+                ComponentReferenceSession.status != "complete",
+                ComponentReferenceSession.status != "failed",
+            )
+            .order_by(ComponentReferenceSession.created_at.desc())
+            .first()
+        )
+
+        if not session:
+            return json.dumps({
+                "has_session": False,
+                "components": [],
+                "message": "No active component reference session."
+            })
+
+        components = session.components or []
+        if max_components <= 0:
+            max_components = len(components)
+
+        results = []
+        for comp in components[:max_components]:
+            entry = {
+                "filename": comp.get("filename"),
+                "filepath": comp.get("filepath"),
+                "framework": comp.get("framework"),
+                "file_type": comp.get("file_type"),
+                "size": comp.get("size"),
+                "added_at": comp.get("added_at"),
+            }
+            content = comp.get("content")
+            if include_content and content:
+                truncated = content[:max_chars] if max_chars > 0 else ""
+                entry["content"] = truncated
+                entry["content_truncated"] = len(content) > len(truncated)
+            results.append(entry)
+
+        return json.dumps({
+            "has_session": True,
+            "session_id": session.id,
+            "components_count": len(components),
+            "components": results,
+        }, indent=2)
     finally:
         db_session.close()
 

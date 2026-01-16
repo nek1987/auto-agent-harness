@@ -115,8 +115,9 @@ class RedesignSession(Base):
     # Extracted design tokens - follows the design-tokens-v1 schema
     extracted_tokens = Column(JSON, nullable=True)
 
-    # Change plan - files to modify and their changes
+    # Change plan - either file-level phases or page-based redesign plan
     # {phases: [{name, description, files: [{path, action, changes}]}]}
+    # or {design_system_file: "...", pages: [{route, priority, reference, notes}]}
     change_plan = Column(JSON, nullable=True)
 
     # Detected framework info

@@ -332,8 +332,7 @@ async def add_url_reference(
     """
     Add a URL reference for the redesign.
 
-    The system will capture a screenshot of the URL and store it
-    for design token extraction.
+    Stores the URL for agent-side inspection (no server-side screenshot).
     """
     if request.ref_type != "url":
         raise HTTPException(status_code=400, detail="Expected ref_type='url'")
@@ -365,8 +364,7 @@ async def extract_tokens(
     """
     Extract design tokens from all references.
 
-    Uses Claude Vision API to analyze reference images and extract
-    colors, typography, spacing, and other design tokens.
+    Deprecated: token extraction is now handled by the redesign planner agent.
     """
     project_dir = get_project_dir(project_name)
     with get_db_session(project_dir) as db:
@@ -376,26 +374,20 @@ async def extract_tokens(
         if not session:
             raise HTTPException(status_code=404, detail="No active redesign session")
 
-        # Check for either references OR linked component session
-        has_references = session.references and len(session.references) > 0
-        has_components = session.component_session_id is not None
-
-        if not has_references and not has_components:
-            raise HTTPException(
-                status_code=400,
-                detail="No references or components uploaded. Upload images or a ZIP file first."
-            )
-
-        try:
-            session = await service.extract_tokens(session.id)
+        if session.extracted_tokens:
             return {
                 "status": "ok",
                 "tokens": session.extracted_tokens,
-                "source": "images" if has_references else "components",
+                "source": "saved",
             }
-        except Exception as e:
-            logger.error(f"Token extraction failed: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Token extraction is handled by the redesign planner agent. "
+                "Start the agent in redesign mode to save tokens."
+            ),
+        )
 
 
 @router.get("/tokens")
@@ -426,22 +418,13 @@ async def generate_plan(
     project_name: str,
 ):
     """
-    Generate an implementation plan and create features.
+    Generate an implementation plan.
 
-    Detects the project framework, generates a plan for applying the design
-    tokens, and creates features for the agent to implement.
-
-    This is the key step where features are created - no need to click
-    "approve" before starting the agent.
+    Deprecated: plan generation is now handled by the redesign planner agent.
+    Returns existing plan if already saved.
     """
-    import json
-    from api.database import ComponentReferenceSession
-    from prompts import extract_spec_metadata, get_app_spec
-    from server.services.component_reference_service import ComponentReferenceService
 
     project_dir = get_project_dir(project_name)
-    _, _, Feature = _get_db_classes()
-
     with get_db_session(project_dir) as db:
         service = RedesignService(db, project_dir)
 
@@ -449,117 +432,21 @@ async def generate_plan(
         if not session:
             raise HTTPException(status_code=404, detail="No active redesign session")
 
-        if not session.extracted_tokens:
-            raise HTTPException(status_code=400, detail="Tokens not yet extracted")
-
-        try:
-            session = await service.generate_plan(session.id)
-
-            # Track generated features
-            generated_features_count = 0
-            redesign_feature_created = False
-
-            # Check if redesign feature already exists
-            existing_redesign_feature = db.query(Feature).filter(
-                Feature.item_type == "redesign",
-                Feature.redesign_session_id == session.id,
-            ).first()
-
-            # NEW: AI-driven feature generation from component references
-            if session.component_session_id:
-                component_session = db.query(ComponentReferenceSession).filter(
-                    ComponentReferenceSession.id == session.component_session_id
-                ).first()
-
-                if component_session and component_session.components:
-                    logger.info(
-                        f"Starting AI analysis of {len(component_session.components)} "
-                        f"components for session {session.id}"
-                    )
-
-                    feature_count = None
-                    try:
-                        spec_content = get_app_spec(project_dir)
-                        _, feature_count, _ = extract_spec_metadata(spec_content)
-                    except Exception as exc:
-                        logger.info(f"Unable to read feature_count from app_spec: {exc}")
-
-                    # Use AI to analyze components and generate smart features
-                    comp_service = ComponentReferenceService(db, project_dir)
-                    analysis = await comp_service.ai_analyze_components_for_features(
-                        component_session,
-                        feature_count=feature_count,
-                    )
-
-                    # Create features from AI analysis
-                    suggested_features = analysis.get("suggested_features", [])
-                    if suggested_features:
-                        # Get starting priority (after any existing features)
-                        max_priority_result = db.query(Feature.priority).order_by(
-                            Feature.priority.desc()
-                        ).first()
-                        start_priority = (max_priority_result[0] + 1) if max_priority_result else 1
-
-                        for i, feat_data in enumerate(suggested_features):
-                            feature = Feature(
-                                priority=start_priority + i,
-                                category=feat_data.get("category", "components"),
-                                name=feat_data.get("name", f"Feature {i+1}"),
-                                description=feat_data.get("description", ""),
-                                steps=feat_data.get("steps", []),
-                                dependencies=feat_data.get("dependencies", []),
-                                arch_layer=feat_data.get("arch_layer", 6),
-                                reference_session_id=session.component_session_id,
-                                item_type="feature",
-                                passes=False,
-                                in_progress=False,
-                            )
-                            db.add(feature)
-                            generated_features_count += 1
-
-                        db.commit()
-                        logger.info(
-                            f"AI generated {generated_features_count} features "
-                            f"from component analysis for session {session.id}"
-                        )
-
-            # Create redesign feature if not exists
-            if not existing_redesign_feature:
-                redesign_feature = Feature(
-                    item_type="redesign",
-                    priority=-1,  # Higher than bugs (0) - redesign is top priority
-                    category="design-system",
-                    name=f"Apply design tokens from redesign session {session.id}",
-                    description=(
-                        f"Apply extracted design tokens to the project codebase. "
-                        f"Framework: {session.framework_detected or 'unknown'}. "
-                        f"Use redesign MCP tools to get tokens, plan, and apply changes."
-                    ),
-                    steps=json.dumps([
-                        {"step": "Get design tokens via redesign_get_tokens tool"},
-                        {"step": "Get change plan via redesign_get_plan tool"},
-                        {"step": "For each approved phase, apply file changes using Edit tool"},
-                        {"step": "Complete session via redesign_complete_session tool"},
-                    ]),
-                    passes=False,
-                    in_progress=False,
-                    redesign_session_id=session.id,
-                )
-                db.add(redesign_feature)
-                db.commit()
-                redesign_feature_created = True
-                logger.info(f"Created redesign feature for session {session.id}")
-
+        if session.change_plan:
             return {
                 "status": "ok",
                 "framework": session.framework_detected,
                 "plan": session.change_plan,
-                "redesign_feature_created": redesign_feature_created,
-                "generated_features": generated_features_count,
+                "generated_features": 0,
             }
-        except Exception as e:
-            logger.error(f"Plan generation failed: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Plan generation is handled by the redesign planner agent. "
+                "Start the agent in redesign mode to save the plan and create tasks."
+            ),
+        )
 
 
 @router.get("/plan")
