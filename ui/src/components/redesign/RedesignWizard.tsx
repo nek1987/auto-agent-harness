@@ -345,7 +345,7 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
             <div className="space-y-4">
               <div className="flex justify-end">
                 <button
-                  onClick={loadSession}
+                  onClick={() => loadSession()}
                   disabled={isProcessing}
                   className="neo-btn neo-btn-ghost"
                 >
@@ -364,7 +364,7 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
             <div className="space-y-4">
               <div className="flex justify-end">
                 <button
-                  onClick={loadSession}
+                  onClick={() => loadSession()}
                   disabled={isProcessing}
                   className="neo-btn neo-btn-ghost"
                 >
