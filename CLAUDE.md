@@ -60,7 +60,7 @@ python autonomous_agent_demo.py --project-dir my-app --yolo
 
 **What's different in YOLO mode:**
 - No regression testing (skips `feature_get_for_regression`)
-- No Playwright MCP server (browser automation disabled)
+- No agent-browser MCP server (browser automation disabled)
 - Features marked passing after lint/type-check succeeds
 - Faster iteration for prototyping
 

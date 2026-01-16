@@ -264,7 +264,7 @@ async def run_autonomous_agent(
 
     # Check browser availability for standard mode (not YOLO, not analysis)
     if not yolo_mode and mode != "analysis":
-        print("\nChecking Playwright browser availability...")
+        print("\nChecking agent-browser availability...")
         browser_ok, was_installed, browser_msg = ensure_browser_available(timeout=300)
 
         if not browser_ok:

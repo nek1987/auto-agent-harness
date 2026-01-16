@@ -2,7 +2,7 @@
 Browser Check Module
 ====================
 
-Functions to check and install Playwright browsers before agent runs.
+Functions to check and install agent-browser before agent runs.
 
 This prevents the agent from hanging indefinitely when:
 - Chrome is not found at expected path
@@ -17,6 +17,7 @@ Usage:
 """
 
 import logging
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -27,57 +28,35 @@ logger = logging.getLogger(__name__)
 
 def check_playwright_browser() -> Tuple[bool, str]:
     """
-    Check if Playwright Chromium browser is installed.
+    Check if agent-browser is available.
 
-    Uses npx playwright to check browser availability without importing
-    playwright directly (avoids dependency on playwright Python package).
+    Uses agent-browser CLI to verify availability without importing
+    Playwright directly.
 
     Returns:
         Tuple of (is_installed, message)
     """
     try:
-        # Use npx playwright to check if browsers are installed
-        # This matches how the MCP server uses playwright
         result = subprocess.run(
-            ["npx", "playwright", "install", "--dry-run", "chromium"],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-
-        # If dry-run succeeds without errors, browser should be available
-        if result.returncode == 0:
-            # Check if output indicates browser is already installed
-            if "already installed" in result.stdout.lower() or result.stdout.strip() == "":
-                return True, "Playwright Chromium browser is available"
-
-        # Try alternative check - see if chromium executable exists
-        result2 = subprocess.run(
-            ["npx", "playwright", "install", "--help"],
+            ["agent-browser", "--version"],
             capture_output=True,
             text=True,
             timeout=10
         )
-        if result2.returncode == 0:
-            # Playwright is available, check browsers list
-            result3 = subprocess.run(
-                ["npx", "@playwright/mcp@latest", "--help"],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-            if result3.returncode == 0:
-                return True, "Playwright MCP is available"
+        if result.returncode == 0:
+            return True, "agent-browser is available"
 
-        return False, f"Browser check indicates installation needed: {result.stderr or result.stdout}"
+        return False, f"agent-browser check failed: {result.stderr or result.stdout}"
 
     except subprocess.TimeoutExpired:
         logger.warning("Browser check timed out after 30 seconds")
         return False, "Browser check timed out - may need installation"
 
     except FileNotFoundError:
-        logger.error("npx not found - Node.js may not be installed")
-        return False, "npx not found - please install Node.js"
+        logger.error("agent-browser not found - please install it")
+        if shutil.which("npm"):
+            return False, "agent-browser not found - run: npm install -g agent-browser"
+        return False, "agent-browser not found and npm unavailable"
 
     except Exception as e:
         logger.error(f"Browser check failed: {e}")
@@ -86,7 +65,7 @@ def check_playwright_browser() -> Tuple[bool, str]:
 
 def install_playwright_browser(timeout: int = 300) -> Tuple[bool, str]:
     """
-    Install Playwright Chromium browser with timeout.
+    Install agent-browser (and Chromium) with timeout.
 
     Downloads and installs Chromium browser (~100MB+).
     Uses subprocess with timeout to prevent hanging.
@@ -98,18 +77,42 @@ def install_playwright_browser(timeout: int = 300) -> Tuple[bool, str]:
         Tuple of (success, message)
     """
     try:
-        logger.info(f"Installing Playwright Chromium browser (timeout: {timeout}s)")
-        print(f"   Downloading Chromium browser (this may take a few minutes)...")
+        logger.info(f"Installing agent-browser (timeout: {timeout}s)")
+        print("   Installing agent-browser and downloading Chromium (may take a few minutes)...")
 
-        result = subprocess.run(
-            ["npx", "playwright", "install", "chromium"],
-            capture_output=True,
-            text=True,
-            timeout=timeout
-        )
+        try:
+            result = subprocess.run(
+                ["agent-browser", "install"],
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+        except FileNotFoundError:
+            if not shutil.which("npm"):
+                logger.error("npm not found - cannot install agent-browser")
+                return False, "npm not found - please install Node.js"
+
+            logger.info("agent-browser CLI missing - installing globally via npm")
+            install_cli = subprocess.run(
+                ["npm", "install", "-g", "agent-browser"],
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+            if install_cli.returncode != 0:
+                error_msg = install_cli.stderr or install_cli.stdout
+                logger.error(f"agent-browser CLI install failed: {error_msg}")
+                return False, f"CLI install failed: {error_msg[:200]}"
+
+            result = subprocess.run(
+                ["agent-browser", "install"],
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
 
         if result.returncode == 0:
-            logger.info("Playwright Chromium installed successfully")
+            logger.info("agent-browser installed successfully")
             return True, "Browser installed successfully"
 
         error_msg = result.stderr or result.stdout
@@ -121,8 +124,8 @@ def install_playwright_browser(timeout: int = 300) -> Tuple[bool, str]:
         return False, f"Installation timed out after {timeout}s - check network connection"
 
     except FileNotFoundError:
-        logger.error("npx not found - Node.js may not be installed")
-        return False, "npx not found - please install Node.js"
+        logger.error("agent-browser not found - please install it")
+        return False, "agent-browser not found - install with: npm install -g agent-browser"
 
     except Exception as e:
         logger.error(f"Browser installation failed: {e}")
@@ -131,7 +134,7 @@ def install_playwright_browser(timeout: int = 300) -> Tuple[bool, str]:
 
 def ensure_browser_available(timeout: int = 300) -> Tuple[bool, bool, str]:
     """
-    Ensure Playwright browser is available, installing if needed.
+    Ensure agent-browser is available, installing if needed.
 
     Convenience function that combines check and install.
 
@@ -152,7 +155,7 @@ def ensure_browser_available(timeout: int = 300) -> Tuple[bool, bool, str]:
     print("  BROWSER INSTALLATION REQUIRED")
     print("=" * 60)
     print(f"\n{check_msg}")
-    print("\nAttempting to install Playwright Chromium browser...")
+    print("\nAttempting to install agent-browser...")
 
     success, install_msg = install_playwright_browser(timeout)
 

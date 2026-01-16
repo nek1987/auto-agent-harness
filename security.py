@@ -72,6 +72,7 @@ ALLOWED_COMMANDS = {
     "nest",
     "eslint",
     "prettier",
+    "agent-browser",
 
     # ==========================================================================
     # Python (MUST be used inside containers per prompt rules)

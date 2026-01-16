@@ -142,7 +142,7 @@ COMPONENT_REF_MCP_TOOLS = [
     "mcp__component_ref__component_ref_link_feature_to_page",
 ]
 
-# Playwright MCP tools for browser automation
+# Browser MCP tools for automation (agent-browser with Playwright-compatible tool names)
 PLAYWRIGHT_TOOLS = [
     # Core navigation & screenshots
     "mcp__playwright__browser_navigate",
@@ -322,9 +322,9 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     print(f"   - Filesystem restricted to: {project_dir.resolve()}")
     print("   - Bash commands restricted to allowlist (see security.py)")
     if yolo_mode:
-        print("   - MCP servers: features (database), redesign (styling), component_ref (code refs) - YOLO MODE (no Playwright)")
+        print("   - MCP servers: features (database), redesign (styling), component_ref (code refs) - YOLO MODE (no agent-browser)")
     else:
-        print("   - MCP servers: playwright (browser), features (database), redesign (styling), component_ref (code refs)")
+        print("   - MCP servers: agent-browser (browser), features (database), redesign (styling), component_ref (code refs)")
     print("   - Project settings enabled (skills, commands, CLAUDE.md)")
     print()
 
@@ -364,10 +364,14 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         },
     }
     if not yolo_mode:
-        # Include Playwright MCP server for browser automation (standard mode only)
+        # Include agent-browser MCP server for browser automation (standard mode only)
         mcp_servers["playwright"] = {
-            "command": "npx",
-            "args": ["@playwright/mcp@latest", "--viewport-size", "1280x720"],
+            "command": sys.executable,
+            "args": ["-m", "mcp_server.agent_browser_mcp"],
+            "env": build_safe_mcp_env({
+                "PROJECT_DIR": str(project_dir.resolve()),
+                "PYTHONPATH": str(Path(__file__).parent.resolve()),
+            }),
         }
 
     return ClaudeSDKClient(

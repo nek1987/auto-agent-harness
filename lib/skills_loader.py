@@ -68,6 +68,7 @@ SKILL_CATEGORIES: dict[str, list[str]] = {
         "frontend-design",
         "ui-design-system",
         "ux-researcher-designer",
+        "react-best-practices",
     ],
     # Backend mode - API and server development
     "backend": [
@@ -78,7 +79,8 @@ SKILL_CATEGORIES: dict[str, list[str]] = {
     # Testing mode - QA and test automation
     "testing": [
         "senior-qa",
-        "playwright-expert",
+        "agent-browser",
+        "web-design-guidelines",
         "code-reviewer",
     ],
     # DevOps mode - infrastructure and deployment

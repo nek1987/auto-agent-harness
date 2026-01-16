@@ -237,7 +237,7 @@ def is_context_length_error(error: Any) -> bool:
 
 def is_browser_error(error: Any) -> bool:
     """
-    Check if an error is a Playwright/browser automation error.
+    Check if an error is a browser automation error.
 
     Args:
         error: The error to check
@@ -249,6 +249,8 @@ def is_browser_error(error: Any) -> bool:
     lower_message = message.lower()
 
     browser_patterns = [
+        "agent-browser",
+        "agent browser",
         "playwright",
         "chromium",
         "chrome is not found",
@@ -257,6 +259,7 @@ def is_browser_error(error: Any) -> bool:
         "browser_navigate",
         "launchpersistentcontext",
         "browsertype.launch",
+        "agent-browser install",
         "npx playwright install",
         "mcp__playwright",
     ]
@@ -412,8 +415,8 @@ def get_user_friendly_message(error_info: ErrorInfo) -> str:
 
     if error_info.type == ErrorType.BROWSER:
         return (
-            "Browser automation error. Playwright browser may not be installed. "
-            "Try running 'npx playwright install chromium' or use YOLO mode."
+            "Browser automation error. agent-browser may not be installed. "
+            "Try running 'npm install -g agent-browser' then 'agent-browser install', or use YOLO mode."
         )
 
     # Return original message for other errors

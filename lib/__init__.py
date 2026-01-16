@@ -15,7 +15,7 @@ Contains:
 - project_detector: Auto-detection of project type (Python, Node, Go, etc.)
 - project_scaffold: Docker scaffolding for projects
 - docker_validator: Validation of Docker configuration
-- browser_check: Playwright browser installation check
+- browser_check: agent-browser installation check
 - feature_splitter: Auto-splitting complex features into sub-features
 - completion_reporter: Project completion detection and reporting
 """

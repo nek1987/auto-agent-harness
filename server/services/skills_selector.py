@@ -89,7 +89,7 @@ class SkillsSelector:
         "authentication": ["senior-backend", "senior-architect", "api-designer"],
         "security": ["senior-backend", "senior-architect", "code-reviewer"],
         "ui": ["senior-frontend", "ui-design-system", "ux-researcher-designer"],
-        "testing": ["senior-qa", "playwright-expert", "test-suite-generator"],
+        "testing": ["senior-qa", "agent-browser", "web-design-guidelines", "test-suite-generator"],
         "devops": ["senior-devops", "dockerfile-generator", "docker-optimizer"],
         "architecture": ["senior-architect", "architecture-diagram-creator", "cto-advisor"],
         "documentation": ["technical-doc-creator", "readme-generator", "api-reference-creator"],
