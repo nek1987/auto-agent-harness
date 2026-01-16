@@ -9,6 +9,19 @@ echo "  Auto Agent Harness UI"
 echo "===================================="
 echo ""
 
+# Check if Node.js and npm are available (needed for agent-browser)
+if ! command -v node &> /dev/null; then
+    echo "ERROR: Node.js not found"
+    echo "Please install Node.js from https://nodejs.org"
+    exit 1
+fi
+
+if ! command -v npm &> /dev/null; then
+    echo "ERROR: npm not found"
+    echo "Please install Node.js from https://nodejs.org"
+    exit 1
+fi
+
 # Check if Python is available
 if ! command -v python3 &> /dev/null; then
     if ! command -v python &> /dev/null; then
@@ -32,7 +45,16 @@ source venv/bin/activate
 
 # Install dependencies
 echo "Installing dependencies..."
-pip install -r requirements.txt --quiet
+pip install -r requirements.txt
+
+# Ensure agent-browser is installed
+if ! command -v agent-browser &> /dev/null; then
+    echo "Installing agent-browser CLI..."
+    npm install -g agent-browser
+fi
+
+echo "Installing agent-browser Chromium..."
+agent-browser install
 
 # Run the Python launcher
 python start_ui.py "$@"

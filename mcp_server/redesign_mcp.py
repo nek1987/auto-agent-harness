@@ -38,7 +38,7 @@ from pydantic import Field
 # Add parent directory to path so we can import from api module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from api.database import RedesignSession, RedesignApproval, create_database
+from api.database import Feature, RedesignSession, RedesignApproval, create_database
 
 # Configuration from environment
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", ".")).resolve()
@@ -515,12 +515,70 @@ def redesign_save_plan(
         session.updated_at = datetime.utcnow()
         db_session.commit()
 
+        _ensure_redesign_feature(db_session, session, plan)
+
         return json.dumps({
             "success": True,
             "message": "Redesign plan saved.",
         })
     finally:
         db_session.close()
+
+
+def _ensure_redesign_feature(db_session, session: RedesignSession, plan: dict) -> None:
+    """Create a single redesign Feature linked to this session if missing."""
+    existing = (
+        db_session.query(Feature)
+        .filter(
+            Feature.item_type == "redesign",
+            Feature.redesign_session_id == session.id,
+        )
+        .first()
+    )
+
+    phase_names = []
+    for phase in plan.get("phases", []):
+        if isinstance(phase, dict) and phase.get("name"):
+            phase_names.append(phase["name"])
+
+    phases_summary = ", ".join(phase_names) if phase_names else "approved phases"
+    steps = [
+        "Mark the redesign task in progress.",
+        "Fetch design tokens and the change plan.",
+        f"Apply the plan for: {phases_summary}.",
+        "Complete the redesign session after applying changes.",
+    ]
+
+    if existing:
+        existing.name = "Apply redesign plan"
+        existing.description = (
+            f"Apply redesign plan for session {session.id} "
+            f"({session.project_name})."
+        )
+        existing.category = "redesign"
+        existing.steps = steps
+        existing.arch_layer = 6
+        db_session.commit()
+        return
+
+    feature = Feature(
+        priority=0,
+        category="redesign",
+        name="Apply redesign plan",
+        description=(
+            f"Apply redesign plan for session {session.id} "
+            f"({session.project_name})."
+        ),
+        steps=steps,
+        passes=False,
+        in_progress=False,
+        item_type="redesign",
+        arch_layer=6,
+        redesign_session_id=session.id,
+        source_spec="redesign",
+    )
+    db_session.add(feature)
+    db_session.commit()
 
 
 def _extract_tokens_from_image(client, image_base64: str) -> dict:

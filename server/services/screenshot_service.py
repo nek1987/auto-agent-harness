@@ -2,12 +2,11 @@
 Screenshot Service
 ==================
 
-Provides screenshot capabilities using Playwright for capturing
+Provides screenshot capabilities using agent-browser for capturing
 web pages and visual comparison during redesign operations.
 
 Features:
 - Capture full page screenshots from URLs
-- Capture specific element screenshots
 - Compare before/after screenshots
 - Generate visual diff highlights
 """
@@ -15,23 +14,17 @@ Features:
 import asyncio
 import base64
 import logging
+import json
+import subprocess
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Try to import Playwright
-try:
-    from playwright.async_api import async_playwright, Browser, Page
-    PLAYWRIGHT_AVAILABLE = True
-except ImportError:
-    PLAYWRIGHT_AVAILABLE = False
-    logger.warning("Playwright not installed. Screenshot functionality will be limited.")
-
 
 class ScreenshotService:
     """
-    Service for capturing screenshots of web pages using Playwright.
+    Service for capturing screenshots of web pages using agent-browser.
 
     This service manages a browser instance and provides methods for
     capturing screenshots of URLs for design reference extraction.
@@ -39,43 +32,51 @@ class ScreenshotService:
 
     def __init__(self):
         """Initialize the screenshot service."""
-        self._browser: Optional["Browser"] = None
-        self._playwright = None
         self._lock = asyncio.Lock()
 
-    async def _ensure_browser(self) -> "Browser":
-        """Ensure browser is started and return it."""
-        if not PLAYWRIGHT_AVAILABLE:
-            raise RuntimeError(
-                "Playwright is not installed. Install with: pip install playwright && playwright install chromium"
+    async def _ensure_browser(self) -> None:
+        """Ensure agent-browser CLI is available."""
+        try:
+            result = subprocess.run(
+                ["agent-browser", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
-
-        async with self._lock:
-            if self._browser is None:
-                self._playwright = await async_playwright().start()
-                self._browser = await self._playwright.chromium.launch(
-                    headless=True,
-                    args=[
-                        "--no-sandbox",
-                        "--disable-setuid-sandbox",
-                        "--disable-dev-shm-usage",
-                        "--disable-gpu",
-                    ]
-                )
-                logger.info("Playwright browser started")
-
-            return self._browser
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr or result.stdout or "agent-browser check failed")
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                "agent-browser not installed. Run: npm install -g agent-browser && agent-browser install"
+            ) from exc
 
     async def close(self) -> None:
         """Close the browser instance."""
-        async with self._lock:
-            if self._browser:
-                await self._browser.close()
-                self._browser = None
-            if self._playwright:
-                await self._playwright.stop()
-                self._playwright = None
-                logger.info("Playwright browser closed")
+        return None
+
+    def _run_agent_browser(self, args: list[str], timeout: int = 60) -> dict:
+        result = subprocess.run(
+            ["agent-browser", "--json", *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr or result.stdout or "agent-browser command failed")
+
+        payload = result.stdout.strip()
+        if not payload:
+            return {"success": True}
+
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            return {"success": True, "raw": payload}
+
+        if data.get("success") is False:
+            raise RuntimeError(data.get("error") or "agent-browser error")
+
+        return data
 
     async def capture_url(
         self,
@@ -100,36 +101,25 @@ class ScreenshotService:
         Returns:
             PNG screenshot data as bytes
         """
-        browser = await self._ensure_browser()
-        context = await browser.new_context(
-            viewport={"width": width, "height": height},
-            device_scale_factor=2,  # Retina quality
-        )
+        await self._ensure_browser()
 
-        try:
-            page = await context.new_page()
+        self._run_agent_browser(["open", url], timeout=max(30, timeout_ms // 1000))
+        if wait_for_load:
+            self._run_agent_browser(["wait", "--load", "networkidle"], timeout=max(30, timeout_ms // 1000))
 
-            # Navigate to URL
-            await page.goto(
-                url,
-                wait_until="networkidle" if wait_for_load else "domcontentloaded",
-                timeout=timeout_ms,
-            )
+        args = ["screenshot"]
+        if full_page:
+            args.append("--full")
 
-            # Wait a bit for any animations to settle
-            await page.wait_for_timeout(500)
+        result = self._run_agent_browser(args, timeout=max(30, timeout_ms // 1000))
+        data = result.get("data", {})
+        base64_data = data.get("base64")
+        if not base64_data:
+            raise RuntimeError("agent-browser screenshot returned no image data")
 
-            # Take screenshot
-            screenshot = await page.screenshot(
-                full_page=full_page,
-                type="png",
-            )
-
-            logger.info(f"Captured screenshot of {url} ({len(screenshot)} bytes)")
-            return screenshot
-
-        finally:
-            await context.close()
+        screenshot = base64.b64decode(base64_data)
+        logger.info(f"Captured screenshot of {url} ({len(screenshot)} bytes)")
+        return screenshot
 
     async def capture_url_as_base64(
         self,
@@ -172,31 +162,10 @@ class ScreenshotService:
         Returns:
             PNG screenshot data as bytes
         """
-        browser = await self._ensure_browser()
-        context = await browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            device_scale_factor=2,
+        raise NotImplementedError(
+            "Element screenshots are not supported by agent-browser. "
+            "Use full-page screenshots instead."
         )
-
-        try:
-            page = await context.new_page()
-
-            await page.goto(url, wait_until="networkidle", timeout=timeout_ms)
-            await page.wait_for_timeout(500)
-
-            # Find element
-            element = await page.wait_for_selector(selector, timeout=10000)
-            if not element:
-                raise ValueError(f"Element not found: {selector}")
-
-            # Screenshot the element
-            screenshot = await element.screenshot(type="png")
-
-            logger.info(f"Captured element {selector} from {url}")
-            return screenshot
-
-        finally:
-            await context.close()
 
     async def capture_multiple_viewports(
         self,

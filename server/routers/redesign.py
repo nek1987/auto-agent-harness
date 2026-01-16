@@ -519,8 +519,8 @@ async def approve_phase(
     User approves each phase to allow the agent to apply changes.
     The agent checks approval via redesign_check_approval before applying.
 
-    Note: Features are now created in generate_plan, not here.
-    This endpoint only records the approval.
+    Note: Redesign features are created when the planner saves the plan
+    via redesign_save_plan. This endpoint only records the approval.
     """
     project_dir = get_project_dir(project_name)
 
