@@ -73,6 +73,9 @@ export function RedesignWizard({
   const [isStartingAgent, setIsStartingAgent] = useState(false)
   const [isStartingPlanner, setIsStartingPlanner] = useState(false)
   const [plannerTriggered, setPlannerTriggered] = useState(false)
+  const [styleBrief, setStyleBrief] = useState('')
+  const [isSavingBrief, setIsSavingBrief] = useState(false)
+  const [briefSavedAt, setBriefSavedAt] = useState<string | null>(null)
 
   const isRefreshing = isLoading && !!session
   const sessionError = session?.status === 'failed'
@@ -87,6 +90,14 @@ export function RedesignWizard({
     : null
   const showAgentActivity = agentStatus === 'running' && (agentMode === 'redesign' || !agentMode)
   const logTail = logs.slice(-6)
+
+  useEffect(() => {
+    if (session?.style_brief !== undefined && session?.style_brief !== null) {
+      setStyleBrief(session.style_brief)
+    } else if (session) {
+      setStyleBrief('')
+    }
+  }, [session?.style_brief, session?.id])
 
   // Load existing session on mount
   useEffect(() => {
@@ -138,6 +149,31 @@ export function RedesignWizard({
       setError('Failed to load redesign session')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const saveStyleBrief = async () => {
+    if (!session) return
+    const payload = styleBrief.trim()
+    setIsSavingBrief(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/projects/${projectName}/redesign/style-brief`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ style_brief: payload }),
+      })
+      if (response.ok) {
+        setBriefSavedAt(new Date().toISOString())
+        await loadSession()
+      } else {
+        const err = await response.json().catch(() => null)
+        setError(err?.detail || 'Failed to save style brief')
+      }
+    } catch (err) {
+      setError('Failed to save style brief')
+    } finally {
+      setIsSavingBrief(false)
     }
   }
 
@@ -438,6 +474,17 @@ export function RedesignWizard({
                     </span>
                   </>
                 )}
+                {session.style_brief && (
+                  <>
+                    <span className="text-xs text-[var(--color-neo-muted)]">|</span>
+                    <span className="text-xs uppercase text-[var(--color-neo-muted)]">
+                      Style brief
+                    </span>
+                    <span className="text-xs font-bold uppercase">
+                      Set
+                    </span>
+                  </>
+                )}
                 <button
                   onClick={() => loadSession()}
                   disabled={isRefreshing}
@@ -518,13 +565,56 @@ export function RedesignWizard({
 
           {/* Step 1: References */}
           {session && currentStep === 'references' && (
-            <ReferenceUploader
-              projectName={projectName}
-              references={session.references || []}
-              onReferenceAdded={handleReferenceAdded}
-              onComponentsUploaded={handleComponentsUploaded}
-              redesignSessionId={session.id}
-            />
+            <div className="space-y-6">
+              <div className="border-3 border-[var(--color-neo-border)] bg-white p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display font-bold uppercase text-sm">
+                    Style Brief (Optional)
+                  </h3>
+                  {briefSavedAt && (
+                    <span className="text-xs text-[var(--color-neo-muted)]">
+                      Saved {formatTime(briefSavedAt)}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-[var(--color-neo-muted)]">
+                  Describe the exact style to avoid AI-slop (fonts, palette, spacing, component vibe).
+                  This will be treated as high priority during planning.
+                </p>
+                <textarea
+                  value={styleBrief}
+                  onChange={(e) => setStyleBrief(e.target.value)}
+                  placeholder="Example: bold neo-brutal, mono headers, warm neutrals, 8px radius, crisp shadows, no gradients."
+                  className="neo-input min-h-[120px] w-full text-sm"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={saveStyleBrief}
+                    disabled={isSavingBrief || !session}
+                    className="neo-btn neo-btn-primary text-sm"
+                  >
+                    {isSavingBrief ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      'Save Brief'
+                    )}
+                  </button>
+                  {session.style_brief && session.style_brief.trim() === styleBrief.trim() && (
+                    <span className="text-xs text-[var(--color-neo-success)] uppercase">
+                      Applied
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <ReferenceUploader
+                projectName={projectName}
+                references={session.references || []}
+                onReferenceAdded={handleReferenceAdded}
+                onComponentsUploaded={handleComponentsUploaded}
+                redesignSessionId={session.id}
+              />
+            </div>
           )}
 
           {/* Step 2: Design Tokens */}

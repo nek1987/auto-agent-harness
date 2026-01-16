@@ -11,12 +11,33 @@ without touching existing feature implementations yet.
 - Redesign references are already collected (images are attached to this prompt).
 - URL references are provided as plain URLs (no server-side screenshots).
 - Component reference ZIPs may exist (v0.dev/shadcn/etc); use component-ref tools to inspect code.
+- A style brief may be included in the session context; treat it as the top priority source of truth.
 
 ### HARD RULES
 
 - DO NOT call redesign_extract_tokens (server-side AI is deprecated).
 - All analysis must be done by you (Claude SDK/OAuth).
 - Avoid AI-slop: be bold, intentional, and systematic in design decisions.
+- If the style brief conflicts with references, follow the style brief and note the conflict.
+- If references conflict, choose a single consistent direction and document the choice.
+
+### PRIORITY ORDER
+
+1) Style brief (if provided)
+2) Visual references (images, URLs, component ZIPs)
+3) Existing implementation constraints
+
+### UI/UX PRO MAX USAGE
+
+Use ui-ux-pro-max to ground decisions. Run searches using keywords extracted from the style brief
+or references:
+
+- product (product type)
+- style (style keywords)
+- typography (font pairing)
+- color (palette)
+- ux (anti-patterns and accessibility)
+- stack (default: html-tailwind)
 
 ---
 

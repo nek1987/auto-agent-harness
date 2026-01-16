@@ -94,6 +94,7 @@ def _load_redesign_context(project_dir: Path) -> dict:
             "session_id": session.id,
             "references": session.references or [],
             "component_session_id": session.component_session_id,
+            "style_brief": session.style_brief,
         }
     finally:
         db_session.close()
@@ -385,6 +386,7 @@ async def run_autonomous_agent(
                 references = redesign_context.get("references", [])
                 session_id = redesign_context.get("session_id")
                 component_session_id = redesign_context.get("component_session_id")
+                style_brief = redesign_context.get("style_brief")
 
                 summary_lines = []
                 if session_id:
@@ -398,6 +400,9 @@ async def run_autonomous_agent(
                         meta = ref.get("metadata", {}) or {}
                         label = meta.get("filename") or meta.get("original_url") or ref.get("data", "reference")
                         summary_lines.append(f"- {idx}. {ref_type}: {label}")
+                if style_brief:
+                    summary_lines.append("Style brief:")
+                    summary_lines.append(style_brief.strip())
 
                 if summary_lines:
                     prompt = f"{prompt}\n\n## Redesign Session Context\n" + "\n".join(summary_lines)
@@ -412,7 +417,7 @@ async def run_autonomous_agent(
                     meta = ref.get("metadata", {}) or {}
                     media_type = meta.get("content_type") or "image/png"
                     attachments.append({"media_type": media_type, "data": data})
-                    if len(attachments) >= 4:
+                    if len(attachments) >= 8:
                         break
 
                 status, response, error_info = await run_agent_session(

@@ -9,6 +9,7 @@ token extraction, and phase approvals.
 
 import base64
 import logging
+from datetime import datetime
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
@@ -78,6 +79,11 @@ class AddReferenceRequest(BaseModel):
     metadata: Optional[dict] = None
 
 
+class StyleBriefRequest(BaseModel):
+    """Request to set or update the redesign style brief."""
+    style_brief: str
+
+
 class ApprovePhaseRequest(BaseModel):
     """Request to approve a redesign phase."""
     phase: str
@@ -96,6 +102,7 @@ class RedesignSessionResponse(BaseModel):
     change_plan: Optional[dict]
     framework_detected: Optional[str]
     error_message: Optional[str]
+    style_brief: Optional[str]
     created_at: Optional[str]
     updated_at: Optional[str]
 
@@ -355,6 +362,31 @@ async def add_url_reference(
             return {"status": "ok", "references_count": len(session.references or [])}
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/style-brief")
+async def set_style_brief(
+    project_name: str,
+    request: StyleBriefRequest,
+):
+    """
+    Set or update the style brief for the active redesign session.
+    """
+    project_dir = get_project_dir(project_name)
+    with get_db_session(project_dir) as db:
+        service = RedesignService(db, project_dir)
+
+        session = await service.get_active_session(project_name)
+        if not session:
+            raise HTTPException(status_code=404, detail="No active redesign session")
+
+        payload = request.style_brief.strip()
+        session.style_brief = payload if payload else None
+        session.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(session)
+
+        return {"status": "ok", "style_brief": session.style_brief}
 
 
 @router.post("/extract-tokens")

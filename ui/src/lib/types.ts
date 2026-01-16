@@ -511,6 +511,7 @@ export interface RedesignSession {
   change_plan: RedesignPlan | null
   framework_detected: string | null
   error_message: string | null
+  style_brief: string | null
   component_session_id: number | null
   created_at: string | null
   updated_at: string | null

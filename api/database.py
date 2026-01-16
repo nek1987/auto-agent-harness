@@ -120,6 +120,9 @@ class RedesignSession(Base):
     # or {design_system_file: "...", pages: [{route, priority, reference, notes}]}
     change_plan = Column(JSON, nullable=True)
 
+    # Optional style brief provided by user
+    style_brief = Column(Text, nullable=True)
+
     # Detected framework info
     framework_detected = Column(
         String(50),
@@ -156,6 +159,7 @@ class RedesignSession(Base):
             "framework_detected": self.framework_detected,
             "error_message": self.error_message,
             "component_session_id": self.component_session_id,
+            "style_brief": self.style_brief,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "approvals": [a.to_dict() for a in self.approvals] if self.approvals else [],
@@ -555,6 +559,11 @@ def _migrate_database(engine) -> None:
         if "component_session_id" not in redesign_columns:
             conn.execute(text("ALTER TABLE redesign_sessions ADD COLUMN component_session_id INTEGER"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_redesign_sessions_component_session_id ON redesign_sessions(component_session_id)"))
+            conn.commit()
+
+        # Migration 15: Add style_brief to redesign_sessions
+        if "style_brief" not in redesign_columns:
+            conn.execute(text("ALTER TABLE redesign_sessions ADD COLUMN style_brief TEXT"))
             conn.commit()
 
         # Migration 14: Add redesign_session_id to features for redesign task linking

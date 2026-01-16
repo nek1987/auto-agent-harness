@@ -325,7 +325,7 @@ export function ReferenceUploader({
             Drop reference images here
           </h3>
           <p className="text-sm text-[var(--color-neo-muted)] mb-4">
-            or click to browse (PNG, JPG, WebP up to 10MB)
+            or click to browse (PNG, JPG, WebP up to 10MB). Multiple images are supported; the first 8 are sent to the planner.
           </p>
           <div className="flex items-center justify-center gap-3">
             <button

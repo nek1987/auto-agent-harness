@@ -134,6 +134,8 @@ SKILL_CATEGORIES: dict[str, list[str]] = {
     # ui-design-system for design patterns, frontend-design for implementation
     "redesign": [
         "design-system-extractor",
+        "ui-ux-pro-max",
+        "frontend-aesthetics",
         "ui-design-system",
         "frontend-design",
         "senior-frontend",
