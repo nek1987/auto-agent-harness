@@ -37,8 +37,12 @@ export function ChangePlanViewer({
     )
   }
 
-  const isPagePlan = (candidate: RedesignPlan): candidate is RedesignPagePlan =>
-    Array.isArray((candidate as RedesignPagePlan).pages)
+  const isPagePlan = (candidate: RedesignPlan): candidate is RedesignPagePlan => {
+    if (Array.isArray((candidate as RedesignPagePlan).pages)) {
+      return true
+    }
+    return (candidate as RedesignPagePlan).plan_type === 'page_redesign'
+  }
 
   const togglePhase = (phaseName: string) => {
     setExpandedPhases(prev => {
@@ -114,6 +118,21 @@ export function ChangePlanViewer({
   }
 
   const changePlan = plan as ChangePlan
+  const phases = Array.isArray(changePlan.phases) ? changePlan.phases : []
+
+  if (!Array.isArray(changePlan.phases)) {
+    return (
+      <div className="text-center py-12">
+        <FileCode className="mx-auto mb-4 text-[var(--color-neo-muted)]" size={48} />
+        <h3 className="font-display font-bold mb-2">
+          Plan Format Invalid
+        </h3>
+        <p className="text-[var(--color-neo-muted)] text-sm">
+          The redesign plan is missing phase data. Please refresh or rerun the planner.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -136,11 +155,11 @@ export function ChangePlanViewer({
       {/* Phases */}
       <div>
         <h4 className="font-display font-bold uppercase text-sm mb-3">
-          Implementation Phases ({changePlan.phases.length})
+          Implementation Phases ({phases.length})
         </h4>
 
         <div className="space-y-3">
-          {changePlan.phases.map((phase, idx) => (
+          {phases.map((phase, idx) => (
             <PhaseCard
               key={phase.name}
               phase={phase}
@@ -161,12 +180,12 @@ export function ChangePlanViewer({
         </h4>
         <ul className="text-sm text-[var(--color-neo-muted)] space-y-1">
           <li>
-            Total phases: <strong>{changePlan.phases.length}</strong>
+            Total phases: <strong>{phases.length}</strong>
           </li>
           <li>
             Total files to modify:{' '}
             <strong>
-              {changePlan.phases.reduce((acc, p) => acc + p.files.length, 0)}
+              {phases.reduce((acc, p) => acc + (Array.isArray(p.files) ? p.files.length : 0), 0)}
             </strong>
           </li>
           <li>
@@ -195,6 +214,8 @@ function PhaseCard({
   onToggle,
   onApprove,
 }: PhaseCardProps) {
+  const files = Array.isArray(phase.files) ? phase.files : []
+
   return (
     <div className="border-3 border-[var(--color-neo-border)] bg-white">
       {/* Header */}
@@ -217,7 +238,7 @@ function PhaseCard({
 
         <div className="flex items-center gap-2">
           <span className="text-xs text-[var(--color-neo-muted)]">
-            {phase.files.length} file(s)
+            {files.length} file(s)
           </span>
           {isExpanded ? (
             <ChevronDown size={18} />
@@ -232,7 +253,9 @@ function PhaseCard({
         <div className="border-t-3 border-[var(--color-neo-border)]">
           {/* Files */}
           <div className="p-4 space-y-3">
-            {phase.files.map((file, idx) => (
+            {files.map((file, idx) => {
+              const changes = Array.isArray(file.changes) ? file.changes : []
+              return (
               <div
                 key={idx}
                 className="p-3 bg-[var(--color-neo-bg-alt)] border-2 border-[var(--color-neo-border)]"
@@ -255,7 +278,7 @@ function PhaseCard({
 
                 {/* Changes Preview */}
                 <div className="space-y-1">
-                  {file.changes.slice(0, 3).map((change, cIdx) => (
+                  {changes.slice(0, 3).map((change, cIdx) => (
                     <div
                       key={cIdx}
                       className="text-xs text-[var(--color-neo-muted)] font-mono"
@@ -268,14 +291,14 @@ function PhaseCard({
                       )}
                     </div>
                   ))}
-                  {file.changes.length > 3 && (
+                  {changes.length > 3 && (
                     <span className="text-xs text-[var(--color-neo-muted)]">
-                      +{file.changes.length - 3} more changes
+                      +{changes.length - 3} more changes
                     </span>
                   )}
                 </div>
               </div>
-            ))}
+            )})}
           </div>
 
           {/* Approve Button */}
