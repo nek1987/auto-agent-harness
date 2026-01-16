@@ -11,14 +11,19 @@ import {
   ChevronLeft,
   Play,
 } from 'lucide-react'
+import { ActivityPanel } from '../ActivityPanel'
+import { AgentThought } from '../AgentThought'
 import { ReferenceUploader } from './ReferenceUploader'
 import { DesignTokenPreview } from './DesignTokenPreview'
 import { ChangePlanViewer } from './ChangePlanViewer'
-import type { RedesignSession } from '../../lib/types'
+import type { AgentStatus, RedesignPhase, RedesignSession, RedesignStatus } from '../../lib/types'
 
 interface RedesignWizardProps {
   projectName: string
   onClose: () => void
+  logs: Array<{ line: string; timestamp: string }>
+  agentStatus: AgentStatus
+  agentMode?: string | null
 }
 
 type WizardStep = 'references' | 'tokens' | 'plan' | 'implementing'
@@ -30,7 +35,35 @@ const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
   { key: 'implementing', label: 'Implementation', icon: Play },
 ]
 
-export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
+const STATUS_LABELS: Record<RedesignStatus, string> = {
+  collecting: 'Collecting',
+  extracting: 'Extracting',
+  planning: 'Planning',
+  approving: 'Approving',
+  implementing: 'Implementing',
+  verifying: 'Verifying',
+  complete: 'Complete',
+  failed: 'Failed',
+}
+
+const PHASE_LABELS: Record<RedesignPhase, string> = {
+  references: 'References',
+  tokens: 'Tokens',
+  plan: 'Plan',
+  globals: 'Globals',
+  config: 'Config',
+  components: 'Components',
+  pages: 'Pages',
+  verification: 'Verification',
+}
+
+export function RedesignWizard({
+  projectName,
+  onClose,
+  logs,
+  agentStatus,
+  agentMode,
+}: RedesignWizardProps) {
   const [currentStep, setCurrentStep] = useState<WizardStep>('references')
   const [session, setSession] = useState<RedesignSession | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -40,6 +73,20 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
   const [isStartingAgent, setIsStartingAgent] = useState(false)
   const [isStartingPlanner, setIsStartingPlanner] = useState(false)
   const [plannerTriggered, setPlannerTriggered] = useState(false)
+
+  const isRefreshing = isLoading && !!session
+  const sessionError = session?.status === 'failed'
+    ? session.error_message || 'Redesign session failed'
+    : null
+
+  const lastLogTimestamp = logs.length > 0
+    ? logs[logs.length - 1].timestamp
+    : null
+  const lastActivitySeconds = lastLogTimestamp
+    ? Math.floor((Date.now() - new Date(lastLogTimestamp).getTime()) / 1000)
+    : null
+  const showAgentActivity = agentStatus === 'running' && (agentMode === 'redesign' || !agentMode)
+  const logTail = logs.slice(-6)
 
   // Load existing session on mount
   useEffect(() => {
@@ -55,12 +102,18 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
         const data = await response.json()
         setSession(data)
         // Set step based on session data
-        if (data.status === 'implementing' || data.status === 'verifying') {
+        if (data.current_phase === 'references') {
+          setCurrentStep('references')
+        } else if (data.current_phase === 'tokens') {
+          setCurrentStep('tokens')
+        } else if (data.current_phase === 'plan') {
+          setCurrentStep('plan')
+        } else if (data.status === 'implementing' || data.status === 'verifying') {
           setCurrentStep('implementing')
-        } else if (data.change_plan) {
+        } else if (data.status === 'approving' || data.change_plan) {
           setCurrentStep('plan')
           setPlannerTriggered(false)
-        } else if (data.extracted_tokens) {
+        } else if (data.status === 'planning' || data.status === 'extracting' || data.extracted_tokens) {
           setCurrentStep('tokens')
           setPlannerTriggered(false)
         } else if (preferTokens || plannerTriggered) {
@@ -68,14 +121,21 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
         } else {
           setCurrentStep('references')
         }
+        if (data.status === 'failed' && data.error_message) {
+          setError(data.error_message)
+        }
       } else if (response.status === 404) {
         // No active session, start fresh
         setSession(null)
         setPlannerTriggered(false)
         setCurrentStep('references')
+      } else {
+        const err = await response.json().catch(() => null)
+        setError(err?.detail || 'Failed to load redesign session')
       }
     } catch (err) {
       console.error('Failed to load session:', err)
+      setError('Failed to load redesign session')
     } finally {
       setIsLoading(false)
     }
@@ -215,6 +275,27 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
     return false
   }
 
+  const isExtractingTokens = !!session && !session.extracted_tokens && (
+    plannerTriggered ||
+    session.status === 'extracting' ||
+    session.status === 'planning' ||
+    (showAgentActivity && !session.change_plan)
+  )
+
+  const formatTime = (timestamp: string | null) => {
+    if (!timestamp) return null
+    try {
+      return new Date(timestamp).toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+    } catch {
+      return null
+    }
+  }
+
   const handleNext = async () => {
     if (currentStep === 'references' && canProceed()) {
       await startPlannerAgent()
@@ -232,7 +313,7 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
     }
   }
 
-  if (isLoading) {
+  if (isLoading && !session) {
     return (
       <div className="flex items-center justify-center p-12">
         <Loader2 className="animate-spin" size={32} />
@@ -291,10 +372,10 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
         </div>
 
         {/* Error Message */}
-        {error && (
+        {(error || sessionError) && (
           <div className="mx-6 mt-4 flex items-center gap-2 p-3 bg-[var(--color-neo-danger)] text-white border-3 border-[var(--color-neo-border)]">
             <AlertCircle size={18} />
-            <span className="text-sm">{error}</span>
+            <span className="text-sm">{error || sessionError}</span>
             <button onClick={() => setError(null)} className="ml-auto">
               <X size={16} />
             </button>
@@ -303,6 +384,112 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
+          {session && (
+            <div className="mb-6 space-y-3">
+              <div className="flex flex-wrap items-center gap-2 border-3 border-[var(--color-neo-border)] bg-[var(--color-neo-bg-alt)] px-3 py-2">
+                <span className="text-xs uppercase text-[var(--color-neo-muted)]">
+                  Status
+                </span>
+                <span className="text-xs font-bold uppercase">
+                  {STATUS_LABELS[session.status] || session.status}
+                </span>
+                {session.current_phase && (
+                  <>
+                    <span className="text-xs text-[var(--color-neo-muted)]">|</span>
+                    <span className="text-xs uppercase text-[var(--color-neo-muted)]">
+                      Phase
+                    </span>
+                    <span className="text-xs font-bold uppercase">
+                      {PHASE_LABELS[session.current_phase] || session.current_phase}
+                    </span>
+                  </>
+                )}
+                {session.updated_at && (
+                  <>
+                    <span className="text-xs text-[var(--color-neo-muted)]">|</span>
+                    <span className="text-xs uppercase text-[var(--color-neo-muted)]">
+                      Updated
+                    </span>
+                    <span className="text-xs font-bold uppercase">
+                      {formatTime(session.updated_at)}
+                    </span>
+                  </>
+                )}
+                <span className="text-xs text-[var(--color-neo-muted)]">|</span>
+                <span className="text-xs uppercase text-[var(--color-neo-muted)]">
+                  Agent
+                </span>
+                <span className="text-xs font-bold uppercase">
+                  {agentStatus}
+                </span>
+                {agentMode && (
+                  <span className="text-xs uppercase text-[var(--color-neo-muted)]">
+                    ({agentMode})
+                  </span>
+                )}
+                {lastActivitySeconds !== null && showAgentActivity && (
+                  <>
+                    <span className="text-xs text-[var(--color-neo-muted)]">|</span>
+                    <span className="text-xs uppercase text-[var(--color-neo-muted)]">
+                      Last activity
+                    </span>
+                    <span className="text-xs font-bold uppercase">
+                      {lastActivitySeconds}s
+                    </span>
+                  </>
+                )}
+                <button
+                  onClick={() => loadSession()}
+                  disabled={isRefreshing}
+                  className="ml-auto neo-btn neo-btn-ghost text-xs"
+                >
+                  {isRefreshing ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Refreshing...
+                    </>
+                  ) : (
+                    'Refresh'
+                  )}
+                </button>
+              </div>
+
+              <AgentThought logs={logs} agentStatus={agentStatus} />
+              {showAgentActivity && (
+                <ActivityPanel logs={logs} agentStatus={agentStatus} />
+              )}
+
+              {showAgentActivity && (
+                <div className="border-3 border-[var(--color-neo-border)] bg-white p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs uppercase text-[var(--color-neo-muted)] font-display">
+                      Live Output
+                    </span>
+                    <span className="text-xs text-[var(--color-neo-muted)]">
+                      {logTail.length} lines
+                    </span>
+                  </div>
+                  {logTail.length === 0 ? (
+                    <div className="text-xs text-[var(--color-neo-muted)]">
+                      Waiting for agent output...
+                    </div>
+                  ) : (
+                    <div className="space-y-1 font-mono text-xs text-[var(--color-neo-text)]">
+                      {logTail.map((log, idx) => (
+                        <div key={`${log.timestamp}-${idx}`} className="truncate">
+                          <span className="text-[var(--color-neo-muted)]">
+                            {formatTime(log.timestamp)}
+                          </span>{' '}
+                          {log.line}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* No Session - Start Button */}
           {!session && (
             <div className="text-center py-12">
@@ -346,15 +533,19 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
               <div className="flex justify-end">
                 <button
                   onClick={() => loadSession()}
-                  disabled={isProcessing}
+                  disabled={isProcessing || isRefreshing}
                   className="neo-btn neo-btn-ghost"
                 >
-                  Refresh
+                  {isRefreshing ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    'Refresh'
+                  )}
                 </button>
               </div>
               <DesignTokenPreview
                 tokens={session.extracted_tokens}
-                isExtracting={plannerTriggered && !session.extracted_tokens}
+                isExtracting={isExtractingTokens}
               />
             </div>
           )}
@@ -365,10 +556,14 @@ export function RedesignWizard({ projectName, onClose }: RedesignWizardProps) {
               <div className="flex justify-end">
                 <button
                   onClick={() => loadSession()}
-                  disabled={isProcessing}
+                  disabled={isProcessing || isRefreshing}
                   className="neo-btn neo-btn-ghost"
                 >
-                  Refresh
+                  {isRefreshing ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    'Refresh'
+                  )}
                 </button>
               </div>
               <ChangePlanViewer

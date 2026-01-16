@@ -6,6 +6,7 @@ import { FeatureSuggestionsPanel, type Suggestion } from './FeatureSuggestionsPa
 import { SkillsAnalysisPanel } from './SkillsAnalysisPanel'
 import { RedesignWizard } from './redesign'
 import { ReferenceWizard } from './reference/ReferenceWizard'
+import type { AgentStatus } from '../lib/types'
 import type { SubTask } from './TaskCard'
 
 interface ComplexityAnalysis {
@@ -24,9 +25,18 @@ interface Step {
 interface AddFeatureFormProps {
   projectName: string
   onClose: () => void
+  logs: Array<{ line: string; timestamp: string }>
+  agentStatus: AgentStatus
+  agentMode?: string | null
 }
 
-export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
+export function AddFeatureForm({
+  projectName,
+  onClose,
+  logs,
+  agentStatus,
+  agentMode,
+}: AddFeatureFormProps) {
   const formId = useId()
   const [itemType, setItemType] = useState<'feature' | 'bug' | 'reference' | 'redesign'>('feature')
   const [category, setCategory] = useState('')
@@ -292,7 +302,13 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
           className="neo-modal w-full max-w-4xl max-h-[90vh] flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
-          <RedesignWizard projectName={projectName} onClose={onClose} />
+          <RedesignWizard
+            projectName={projectName}
+            onClose={onClose}
+            logs={logs}
+            agentStatus={agentStatus}
+            agentMode={agentMode}
+          />
         </div>
       </div>
     )

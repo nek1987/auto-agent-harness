@@ -6,13 +6,22 @@ API endpoints for agent control (start/stop/pause/resume).
 Uses project registry for path lookups.
 """
 
+import logging
 import re
+from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
 from ..schemas import AgentActionResponse, AgentStartRequest, AgentStatus
 from ..services.process_manager import get_manager
+
+# Lazy imports to avoid circular dependencies
+_create_database = None
+_RedesignSession = None
+
+logger = logging.getLogger(__name__)
 
 
 def _get_project_path(project_name: str) -> Path:
@@ -24,6 +33,36 @@ def _get_project_path(project_name: str) -> Path:
 
     from registry import get_project_path
     return get_project_path(project_name)
+
+
+def _get_db_classes():
+    """Lazy import of database classes."""
+    global _create_database, _RedesignSession
+    if _create_database is None:
+        import sys
+        from pathlib import Path
+        root = Path(__file__).parent.parent.parent
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        from api.database import RedesignSession, create_database
+        _create_database = create_database
+        _RedesignSession = RedesignSession
+    return _create_database, _RedesignSession
+
+
+@contextmanager
+def get_db_session(project_dir: Path):
+    """
+    Context manager for database sessions.
+    Ensures session is always closed, even on exceptions.
+    """
+    create_database, _ = _get_db_classes()
+    _, SessionLocal = create_database(project_dir)
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 router = APIRouter(prefix="/api/projects/{project_name}/agent", tags=["agent"])
@@ -56,6 +95,32 @@ def get_project_manager(project_name: str):
     return get_manager(project_name, project_dir, ROOT_DIR)
 
 
+def _mark_redesign_session_extracting(project_name: str, project_dir: Path) -> None:
+    """Mark active redesign session as extracting when planner starts."""
+    try:
+        with get_db_session(project_dir) as db:
+            _, RedesignSession = _get_db_classes()
+            session = (
+                db.query(RedesignSession)
+                .filter(
+                    RedesignSession.project_name == project_name,
+                    RedesignSession.status != "complete",
+                    RedesignSession.status != "failed",
+                )
+                .order_by(RedesignSession.created_at.desc())
+                .first()
+            )
+            if not session or session.status != "collecting":
+                return
+
+            session.status = "extracting"
+            session.current_phase = "tokens"
+            session.updated_at = datetime.utcnow()
+            db.commit()
+    except Exception as exc:
+        logger.warning("Failed to update redesign session status: %s", exc)
+
+
 @router.get("/status", response_model=AgentStatus)
 async def get_agent_status(project_name: str):
     """Get the current status of the agent for a project."""
@@ -82,6 +147,11 @@ async def start_agent(
     manager = get_project_manager(project_name)
 
     success, message = await manager.start(yolo_mode=request.yolo_mode, mode=request.mode)
+
+    if success and request.mode == "redesign":
+        project_dir = _get_project_path(project_name)
+        if project_dir:
+            _mark_redesign_session_extracting(project_name, project_dir)
 
     return AgentActionResponse(
         success=success,

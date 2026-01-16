@@ -380,6 +380,9 @@ function App() {
         <AddFeatureForm
           projectName={selectedProject}
           onClose={() => setShowAddFeature(false)}
+          logs={wsState.logs}
+          agentStatus={wsState.agentStatus}
+          agentMode={agentStatusData?.mode ?? null}
         />
       )}
 
