@@ -254,8 +254,10 @@ def component_ref_get_components(
     include_content: Annotated[bool, Field(description="Include component code content")] = True,
     max_components: Annotated[int, Field(description="Maximum number of components to return")] = 10,
     max_chars: Annotated[int, Field(description="Max characters per component content")] = 2000,
+    page_identifier: Annotated[str, Field(description="Optional page identifier to fetch linked session components")] = "",
+    session_id: Annotated[int, Field(description="Optional component reference session id to fetch")] = 0,
 ) -> str:
-    """Get components from the active component reference session.
+    """Get components from a component reference session.
 
     Returns component metadata and (optionally) truncated code content.
     """
@@ -263,16 +265,45 @@ def component_ref_get_components(
 
     db_session = get_session()
     try:
-        session = (
-            db_session.query(ComponentReferenceSession)
-            .filter(
-                ComponentReferenceSession.project_name == project_name,
-                ComponentReferenceSession.status != "complete",
-                ComponentReferenceSession.status != "failed",
+        resolved_page_ref = None
+        if page_identifier:
+            page_id = page_identifier if page_identifier.startswith("/") else f"/{page_identifier}"
+            resolved_page_ref = (
+                db_session.query(PageReference)
+                .filter(
+                    PageReference.project_name == project_name,
+                    PageReference.page_identifier == page_id,
+                )
+                .first()
             )
-            .order_by(ComponentReferenceSession.created_at.desc())
-            .first()
-        )
+            if not resolved_page_ref or not resolved_page_ref.reference_session_id:
+                return json.dumps({
+                    "has_session": False,
+                    "components": [],
+                    "message": f"No page reference found for '{page_id}'."
+                })
+            session_id = resolved_page_ref.reference_session_id
+
+        if session_id:
+            session = (
+                db_session.query(ComponentReferenceSession)
+                .filter(
+                    ComponentReferenceSession.project_name == project_name,
+                    ComponentReferenceSession.id == session_id,
+                )
+                .first()
+            )
+        else:
+            session = (
+                db_session.query(ComponentReferenceSession)
+                .filter(
+                    ComponentReferenceSession.project_name == project_name,
+                    ComponentReferenceSession.status != "complete",
+                    ComponentReferenceSession.status != "failed",
+                )
+                .order_by(ComponentReferenceSession.created_at.desc())
+                .first()
+            )
 
         if not session:
             return json.dumps({
@@ -302,12 +333,17 @@ def component_ref_get_components(
                 entry["content_truncated"] = len(content) > len(truncated)
             results.append(entry)
 
-        return json.dumps({
+        response = {
             "has_session": True,
             "session_id": session.id,
             "components_count": len(components),
             "components": results,
-        }, indent=2)
+        }
+        if resolved_page_ref:
+            response["page_reference_id"] = resolved_page_ref.id
+            response["page_identifier"] = resolved_page_ref.page_identifier
+
+        return json.dumps(response, indent=2)
     finally:
         db_session.close()
 

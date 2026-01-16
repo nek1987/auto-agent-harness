@@ -12,6 +12,7 @@ without touching existing feature implementations yet.
 - URL references are provided as plain URLs (no server-side screenshots).
 - Component reference ZIPs may exist (v0.dev/shadcn/etc); use component-ref tools to inspect code.
 - A style brief may be included in the session context; treat it as the top priority source of truth.
+- Component ZIPs may include HTML/CSS markup for specific pages; treat HTML as layout reference and ignore embedded images.
 
 ### HARD RULES
 
@@ -53,9 +54,9 @@ component_ref_scan_project
 component_ref_list_references
 ```
 
-3) If component references exist, fetch code to inspect patterns:
+3) If component references exist, fetch code/HTML per page to inspect patterns:
 ```
-component_ref_get_components
+component_ref_get_components page_identifier="/route"
 ```
 
 Use this to infer design tokens, component patterns, and UI primitives.
@@ -71,6 +72,7 @@ Create **docs/redesign/redesign_system.md** with:
 - Component primitives (buttons, cards, inputs, tables, headers)
 - Layout rules (grid, gutters, vertical rhythm)
 - Anti‑AI‑slop rules (avoid defaults, specify bold visual direction)
+- Translate HTML layout references into React + shadcn primitives (Card, Button, Input, Table, Tabs, etc.) while preserving structure.
 
 This file is the single source of truth for the redesign.
 

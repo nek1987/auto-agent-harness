@@ -52,6 +52,8 @@ COMPONENT_EXTENSIONS = {
     ".css": "css",
     ".scss": "scss",
     ".sass": "sass",
+    ".html": "html",
+    ".htm": "html",
 }
 
 # Files to skip when parsing ZIP
@@ -180,9 +182,23 @@ class ComponentReferenceService:
         try:
             components = self._extract_components_from_zip(file_content)
 
-            # Update session with components
+            # Update session with components (replace duplicates by key)
             existing_components = session.components or []
-            existing_components.extend(components)
+            index_by_key: dict[str, int] = {}
+            for idx, comp in enumerate(existing_components):
+                key = self._component_key(comp)
+                if key:
+                    index_by_key[key] = idx
+
+            for comp in components:
+                key = self._component_key(comp)
+                if key and key in index_by_key:
+                    existing_components[index_by_key[key]] = comp
+                else:
+                    if key:
+                        index_by_key[key] = len(existing_components)
+                    existing_components.append(comp)
+
             session.components = existing_components
             session.updated_at = datetime.utcnow()
             self.db.commit()
@@ -265,10 +281,27 @@ class ComponentReferenceService:
                 return True
         return False
 
+    def _component_key(self, component: dict) -> str | None:
+        """Generate a stable key for deduplicating components."""
+        filename = component.get("filename")
+        filepath = component.get("filepath")
+        ext = component.get("extension")
+        if not ext and filename:
+            ext = Path(filename).suffix.lower()
+        if ext in (".html", ".htm") and filename:
+            return f"html::{filename}"
+        return filepath or filename
+
     def _detect_framework(self, filename: str, content: str) -> str:
         """Detect the framework used by a component."""
         filename_lower = filename.lower()
         ext = Path(filename).suffix.lower()
+
+        # HTML files
+        if ext in (".html", ".htm"):
+            if "class=" in content and re.search(r'class=["\'][^"\']*(?:flex|grid|p-|m-|bg-|text-)', content):
+                return "html-tailwind"
+            return "html"
 
         # Vue files
         if ext == ".vue":
@@ -331,6 +364,10 @@ class ComponentReferenceService:
         ext = Path(filename).suffix.lower()
         if ext in (".css", ".scss", ".sass"):
             return "styles"
+
+        # Check for HTML markup
+        if ext in (".html", ".htm"):
+            return "markup"
 
         # Check for config files
         if "config" in filename_lower or filename_lower.endswith(".config.ts"):
