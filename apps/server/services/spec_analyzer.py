@@ -25,13 +25,13 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 
 # Import validation from prompts module (relative import for server context)
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from prompts import SpecValidationResult, validate_spec_structure
 
 logger = logging.getLogger(__name__)
 
 # Root directory of the project
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent.parent
 
 
 @dataclass

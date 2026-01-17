@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 def _get_project_path(project_name: str) -> Path:
     """Get project path from registry."""
     import sys
-    root = Path(__file__).parent.parent.parent
+    root = Path(__file__).parent.parent.parent.parent
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 
@@ -41,7 +41,7 @@ def _get_db_classes():
     if _create_database is None:
         import sys
         from pathlib import Path
-        root = Path(__file__).parent.parent.parent
+        root = Path(__file__).parent.parent.parent.parent
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
         from api.database import RedesignSession, create_database
@@ -68,7 +68,7 @@ def get_db_session(project_dir: Path):
 router = APIRouter(prefix="/api/projects/{project_name}/agent", tags=["agent"])
 
 # Root directory for process manager
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent.parent
 
 
 def validate_project_name(name: str) -> str:

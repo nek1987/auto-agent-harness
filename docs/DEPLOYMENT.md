@@ -345,7 +345,7 @@ User=your-user
 WorkingDirectory=/path/to/auto-agent-harness
 Environment="HOST=0.0.0.0"
 Environment="PORT=8888"
-ExecStart=/path/to/auto-agent-harness/venv/bin/python -m uvicorn server.main:app --host 0.0.0.0 --port 8888
+ExecStart=/path/to/auto-agent-harness/venv/bin/python -m uvicorn apps.server.main:app --host 0.0.0.0 --port 8888
 Restart=always
 RestartSec=5
 ```
@@ -370,7 +370,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # 4. Rebuild frontend (if UI changed)
-cd ui
+cd apps/ui
 npm install
 npm run build
 cd ..
@@ -402,7 +402,7 @@ source venv/bin/activate
 pip install -r requirements.txt --quiet
 
 echo "Rebuilding frontend..."
-cd ui
+cd apps/ui
 npm install --silent
 npm run build
 cd ..
@@ -471,9 +471,9 @@ docker-compose -p auto-agent-old down
 ### Log Format
 
 ```
-2025-01-13 12:34:56 [INFO] server.main: POST /api/projects/test/agent/start status=200 duration=0.123s client=192.168.1.10
-2025-01-13 12:34:57 [INFO] server.main: GET /api/projects/test/features status=200 duration=0.045s client=192.168.1.10
-2025-01-13 12:35:00 [ERROR] server.main: Agent crashed: Connection refused
+2025-01-13 12:34:56 [INFO] apps.server.main: POST /api/projects/test/agent/start status=200 duration=0.123s client=192.168.1.10
+2025-01-13 12:34:57 [INFO] apps.server.main: GET /api/projects/test/features status=200 duration=0.045s client=192.168.1.10
+2025-01-13 12:35:00 [ERROR] apps.server.main: Agent crashed: Connection refused
 ```
 
 ### Viewing Logs
@@ -528,7 +528,7 @@ LOG_LEVEL=DEBUG
 Or via environment variable:
 
 ```bash
-LOG_LEVEL=DEBUG python -m uvicorn server.main:app
+LOG_LEVEL=DEBUG python -m uvicorn apps.server.main:app
 ```
 
 ---

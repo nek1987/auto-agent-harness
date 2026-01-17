@@ -240,7 +240,7 @@ def handle_spec_import(
     if analyze:
         print("\nAnalyzing with Claude...")
         try:
-            from server.services.spec_analyzer import SpecAnalyzer
+            from apps.server.services.spec_analyzer import SpecAnalyzer
 
             async def do_analysis():
                 analyzer = SpecAnalyzer()

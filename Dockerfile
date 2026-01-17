@@ -8,16 +8,16 @@
 # ----------------------------------------------------------------------------
 FROM node:20-alpine AS ui-builder
 
-WORKDIR /app/ui
+WORKDIR /app/apps/ui
 
 # Copy package files
-COPY ui/package*.json ./
+COPY apps/ui/package*.json ./
 
 # Install dependencies
 RUN npm ci
 
 # Copy source files
-COPY ui/ ./
+COPY apps/ui/ ./
 
 # Build production bundle
 RUN npm run build
@@ -52,7 +52,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=auto-agent:auto-agent . .
 
 # Copy built UI from builder stage
-COPY --from=ui-builder --chown=auto-agent:auto-agent /app/ui/dist /app/ui/dist
+COPY --from=ui-builder --chown=auto-agent:auto-agent /app/apps/ui/dist /app/apps/ui/dist
 
 # Create directories for data
 RUN mkdir -p /app/data /workspace && \
@@ -77,4 +77,4 @@ ENV HOST=0.0.0.0 \
     AUTH_ENABLED=true
 
 # Start server
-CMD ["python", "-m", "uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "8888"]
+CMD ["python", "-m", "uvicorn", "apps.server.main:app", "--host", "0.0.0.0", "--port", "8888"]

@@ -20,7 +20,7 @@ from ..schemas import ImageAttachment, TextAttachment
 
 # Import skills loader for spec analysis mode
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from lib.skills_loader import get_skills_context
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ async def _make_multimodal_message(content_blocks: list[dict]) -> AsyncGenerator
     }
 
 # Root directory of the project
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent.parent
 
 
 class SpecChatSession:

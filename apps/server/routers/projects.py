@@ -41,7 +41,7 @@ def _init_imports():
         return
 
     import sys
-    root = Path(__file__).parent.parent.parent
+    root = Path(__file__).parent.parent.parent.parent
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 
@@ -59,7 +59,7 @@ def _init_imports():
 def _get_registry_functions():
     """Get registry functions with lazy import."""
     import sys
-    root = Path(__file__).parent.parent.parent
+    root = Path(__file__).parent.parent.parent.parent
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 
@@ -377,7 +377,7 @@ async def import_project_features(name: str, import_data: ImportFeaturesRequest)
     # Import features using the database module
     try:
         import sys
-        root = Path(__file__).parent.parent.parent
+        root = Path(__file__).parent.parent.parent.parent
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
 

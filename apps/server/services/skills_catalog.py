@@ -420,7 +420,7 @@ def get_skills_catalog(skills_dir: Optional[Path] = None) -> SkillsCatalog:
         if _catalog is None:
             if skills_dir is None:
                 # Default to project root .claude/skills
-                skills_dir = Path(__file__).parent.parent.parent / ".claude" / "skills"
+                skills_dir = Path(__file__).parent.parent.parent.parent / ".claude" / "skills"
             _catalog = SkillsCatalog(skills_dir)
 
         return _catalog

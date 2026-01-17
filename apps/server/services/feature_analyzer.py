@@ -21,7 +21,7 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 logger = logging.getLogger(__name__)
 
 # Root directory of the project
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent.parent
 
 
 @dataclass

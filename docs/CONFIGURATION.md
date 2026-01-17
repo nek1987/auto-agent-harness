@@ -69,7 +69,7 @@ AUTH_ENABLED=false  # No login required (local dev only)
 
 **Security Note**: Always keep enabled when exposing to network or in production.
 
-**Source**: `server/main.py:46`
+**Source**: `apps/server/main.py:46`
 
 ---
 
@@ -101,7 +101,7 @@ JWT_SECRET_KEY=a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456
 
 **Security Note**: Keep this secret! Anyone with this key can forge authentication tokens.
 
-**Source**: `server/services/auth_service.py:21`
+**Source**: `apps/server/services/auth_service.py:21`
 
 ---
 
@@ -123,7 +123,7 @@ DEFAULT_ADMIN_PASSWORD=MyStr0ng!Pass#123  # Production (16+ chars)
 
 **Security Note**: Change immediately in production! Use 16+ characters with mixed case, numbers, and symbols.
 
-**Source**: `server/services/auth_service.py:209`
+**Source**: `apps/server/services/auth_service.py:209`
 
 ---
 
@@ -152,7 +152,7 @@ DATA_DIR=/var/lib/auto-agent-harness  # Custom location
 
 **Note**: This path is always allowed for file access regardless of `ALLOWED_ROOT_DIRECTORY`.
 
-**Source**: `server/services/auth_service.py:27`, `server/lib/path_security.py:34`, `registry.py:90`
+**Source**: `apps/server/services/auth_service.py:27`, `apps/server/lib/path_security.py:34`, `registry.py:90`
 
 ---
 
@@ -180,7 +180,7 @@ ALLOWED_ROOT_DIRECTORY=/Users/me/projects
 
 **Security Note**: Always set in Docker to prevent container escape attacks.
 
-**Source**: `server/lib/path_security.py:30`
+**Source**: `apps/server/lib/path_security.py:30`
 
 ---
 
@@ -273,7 +273,7 @@ REQUIRE_LOCALHOST=false  # Docker mode (required for networking)
 - Docker mode: Set `false` (container networking requires it)
 - Production: Set `false` and use reverse proxy for security
 
-**Source**: `server/lib/path_security.py:40`
+**Source**: `apps/server/lib/path_security.py:40`
 
 ---
 

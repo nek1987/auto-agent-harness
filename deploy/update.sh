@@ -25,7 +25,7 @@ echo "========================================"
 echo ""
 
 # Check if running from project root
-if [ ! -f "server/main.py" ]; then
+if [ ! -f "apps/server/main.py" ]; then
     echo -e "${RED}ERROR: Please run this script from the project root directory${NC}"
     echo "  cd /path/to/auto-agent-harness"
     echo "  ./deploy/update.sh"
@@ -83,8 +83,8 @@ fi
 # Step 4: Rebuild frontend
 echo ""
 echo "[4/4] Rebuilding frontend..."
-if [ -d "ui" ]; then
-    cd ui
+if [ -d "apps/ui" ]; then
+    cd apps/ui
 
     # Check if node_modules exists
     if [ ! -d "node_modules" ]; then
@@ -122,6 +122,6 @@ if [ -n "$SERVICE_EXISTS" ]; then
     echo "  tail -f /var/log/auto-agent/server.log"
 else
     echo "  source venv/bin/activate"
-    echo "  python -m uvicorn server.main:app --host 0.0.0.0 --port 8888"
+    echo "  python -m uvicorn apps.server.main:app --host 0.0.0.0 --port 8888"
 fi
 echo ""

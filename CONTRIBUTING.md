@@ -57,7 +57,7 @@ python test_security.py
 ### Frontend
 
 ```bash
-cd ui
+cd apps/ui
 npm install
 npm run dev      # Development server
 npm run lint     # Check for issues
@@ -144,12 +144,12 @@ __all__ = [
 
 ### Adding New API Endpoints
 
-1. Create router in `server/routers/`:
+1. Create router in `apps/server/routers/`:
 
 ```python
-# server/routers/your_router.py
+# apps/server/routers/your_router.py
 from fastapi import APIRouter, Depends
-from server.services.auth_service import get_current_user
+from apps.server.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/your-endpoint", tags=["your-tag"])
 
@@ -158,19 +158,19 @@ async def get_items(user: dict = Depends(get_current_user)):
     ...
 ```
 
-2. Register in `server/main.py`:
+2. Register in `apps/server/main.py`:
 
 ```python
-from server.routers.your_router import router as your_router
+from apps.server.routers.your_router import router as your_router
 app.include_router(your_router, prefix="/api")
 ```
 
 ### Adding New UI Components
 
-1. Create component in `ui/src/components/`:
+1. Create component in `apps/ui/src/components/`:
 
 ```typescript
-// ui/src/components/YourComponent.tsx
+// apps/ui/src/components/YourComponent.tsx
 interface YourComponentProps {
   // props
 }
@@ -182,7 +182,7 @@ export function YourComponent({ ... }: YourComponentProps) {
 }
 ```
 
-2. Use neobrutalism design system (see `ui/src/styles/globals.css`)
+2. Use neobrutalism design system (see `apps/ui/src/styles/globals.css`)
 
 ## Testing
 

@@ -30,7 +30,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.absolute()
 VENV_DIR = ROOT / "venv"
-UI_DIR = ROOT / "ui"
+UI_DIR = ROOT / "apps" / "ui"
 
 
 def print_step(step: int, total: int, message: str) -> None:
@@ -165,7 +165,7 @@ def start_dev_server(host: str, port: int, ssl_certfile: str = None, ssl_keyfile
     # Build uvicorn command
     cmd = [
         str(venv_python), "-m", "uvicorn",
-        "server.main:app",
+        "apps.server.main:app",
         "--host", host,
         "--port", str(port),
         "--reload"
@@ -199,7 +199,7 @@ def start_production_server(host: str, port: int, ssl_certfile: str = None, ssl_
     # Build uvicorn command
     cmd = [
         str(venv_python), "-m", "uvicorn",
-        "server.main:app",
+        "apps.server.main:app",
         "--host", host,
         "--port", str(port)
     ]

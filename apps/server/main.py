@@ -72,8 +72,8 @@ from .websocket import project_websocket
 from .lib.path_security import config as path_config
 
 # Paths
-ROOT_DIR = Path(__file__).parent.parent
-UI_DIST_DIR = ROOT_DIR / "ui" / "dist"
+ROOT_DIR = Path(__file__).parent.parent.parent
+UI_DIST_DIR = ROOT_DIR / "apps" / "ui" / "dist"
 
 # Rate limiter for auth endpoints
 limiter = Limiter(key_func=get_remote_address)
@@ -318,7 +318,7 @@ if UI_DIST_DIR.exists():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "server.main:app",
+        "apps.server.main:app",
         host="127.0.0.1",  # Localhost only for security
         port=8888,
         reload=True,

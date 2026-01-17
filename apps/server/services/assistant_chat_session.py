@@ -27,7 +27,7 @@ from .assistant_database import (
 logger = logging.getLogger(__name__)
 
 # Root directory of the project
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent.parent
 
 # Read-only feature MCP tools (no mark_passing, skip, create_bulk)
 READONLY_FEATURE_MCP_TOOLS = [

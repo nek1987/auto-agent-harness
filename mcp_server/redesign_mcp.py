@@ -66,7 +66,7 @@ async def get_screenshot_service():
     """Get the screenshot service (lazy-initialized)."""
     global _screenshot_service
     if _screenshot_service is None:
-        from server.services.screenshot_service import ScreenshotService
+        from apps.server.services.screenshot_service import ScreenshotService
         _screenshot_service = ScreenshotService()
     return _screenshot_service
 

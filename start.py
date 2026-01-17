@@ -733,7 +733,7 @@ def import_spec_to_project_flow(projects: list[tuple[str, Path]]) -> tuple[str, 
     if import_choice == '2':
         print("\nAnalyzing with Claude...")
         try:
-            from server.services.spec_analyzer import SpecAnalyzer
+            from apps.server.services.spec_analyzer import SpecAnalyzer
             import asyncio
 
             async def do_analysis():

@@ -16,7 +16,7 @@ Environment="HOST=0.0.0.0"
 Environment="PORT=8888"
 
 # Main command
-ExecStart=/path/to/auto-agent-harness/venv/bin/python -m uvicorn server.main:app --host 0.0.0.0 --port 8888
+ExecStart=/path/to/auto-agent-harness/venv/bin/python -m uvicorn apps.server.main:app --host 0.0.0.0 --port 8888
 
 # Restart policy
 Restart=always

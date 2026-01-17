@@ -29,7 +29,9 @@ A production-ready autonomous coding agent system with a React-based UI. Built o
 ### Prerequisites
 
 - **Python 3.11+**
+- **Node.js 18+** (UI build + redesign screenshotting)
 - **Claude Code CLI**: `npm install -g @anthropic-ai/claude-code`
+- **agent-browser CLI**: `npm install -g agent-browser && agent-browser install`
 - **Authentication**: Claude Pro/Max subscription OR Anthropic API key
 
 ### Option A: Native Mode (Local Development)
@@ -50,7 +52,11 @@ cp .env.native.example .env
 # 3. Login to Claude (opens browser)
 claude login
 
-# 4. Start
+# 4. Start (UI)
+./start_ui.sh     # Linux/macOS
+start_ui.bat      # Windows
+
+# 5. Start (CLI only)
 ./start.sh        # Linux/macOS
 start.bat         # Windows
 ```
@@ -78,6 +84,14 @@ docker-compose up -d --build
 Access UI at `http://localhost:8888`
 
 > **Advanced deployment**: See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+
+---
+
+## Documentation
+
+- [docs/USER_MANUAL.md](docs/USER_MANUAL.md) - End-to-end guide for project setup, agent runs, and redesign workflows
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) - Environment variables and system settings
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) - Production deployment and operations
 
 ---
 
@@ -135,14 +149,14 @@ Access UI at `http://localhost:8888`
 | `dependency_resolver.py` | Topological sort with Kahn's algorithm |
 | `context_loader.py` | Priority-based context file loading |
 
-### Server Components (`server/`)
+### Server Components (`apps/server/`)
 
 | Module | Description |
 |--------|-------------|
-| `services/auth_service.py` | JWT + bcrypt authentication |
-| `lib/path_security.py` | ALLOWED_ROOT_DIRECTORY enforcement |
-| `routers/auth.py` | Login/logout/refresh endpoints |
-| `routers/agent.py` | Agent start/stop/pause controls |
+| `apps/server/services/auth_service.py` | JWT + bcrypt authentication |
+| `apps/server/lib/path_security.py` | ALLOWED_ROOT_DIRECTORY enforcement |
+| `apps/server/routers/auth.py` | Login/logout/refresh endpoints |
+| `apps/server/routers/agent.py` | Agent start/stop/pause controls |
 
 ---
 
@@ -271,21 +285,22 @@ auto-agent-harness/
 │   ├── checkpoint.py         # Snapshots & rollback
 │   ├── dependency_resolver.py # Feature ordering
 │   └── context_loader.py     # Context files
-├── server/
-│   ├── main.py               # FastAPI server + auth middleware
-│   ├── lib/path_security.py  # Path validation
-│   ├── services/auth_service.py # JWT + bcrypt
-│   └── routers/              # API endpoints
+├── apps/
+│   ├── server/
+│   │   ├── main.py               # FastAPI server + auth middleware
+│   │   ├── lib/path_security.py  # Path validation
+│   │   ├── services/auth_service.py # JWT + bcrypt
+│   │   └── routers/              # API endpoints
+│   └── ui/                       # React frontend
+│       ├── src/
+│       │   ├── App.tsx           # Main app with auth
+│       │   ├── components/       # UI components
+│       │   └── lib/auth.ts       # Zustand auth store
+│       └── package.json
 ├── mcp_server/
 │   └── feature_mcp.py        # Feature management MCP
 ├── api/
 │   └── database.py           # SQLAlchemy models
-├── ui/                       # React frontend
-│   ├── src/
-│   │   ├── App.tsx           # Main app with auth
-│   │   ├── components/       # UI components
-│   │   └── lib/auth.ts       # Zustand auth store
-│   └── package.json
 ├── .claude/
 │   ├── commands/             # Slash commands
 │   ├── skills/               # Claude Code skills
@@ -338,7 +353,7 @@ python start.py
 ### Frontend
 
 ```bash
-cd ui
+cd apps/ui
 npm install
 npm run dev      # Development server
 npm run build    # Production build

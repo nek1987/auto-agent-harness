@@ -43,7 +43,7 @@ router = APIRouter(prefix="/api/skills-analysis", tags=["skills-analysis"])
 def _get_project_path(project_name: str) -> Optional[Path]:
     """Get project path from registry."""
     import sys
-    root = Path(__file__).parent.parent.parent
+    root = Path(__file__).parent.parent.parent.parent
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 

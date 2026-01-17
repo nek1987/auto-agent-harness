@@ -95,8 +95,8 @@ Desktop.ini
 # ===================
 # Build outputs
 # ===================
-ui/dist/
-ui/.vite/
+apps/ui/dist/
+apps/ui/.vite/
 .vite/
 
 # ===================

@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 def _get_project_path(project_name: str) -> Path:
     """Get project path from registry."""
     import sys
-    root = Path(__file__).parent.parent.parent
+    root = Path(__file__).parent.parent.parent.parent
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 
@@ -47,7 +47,7 @@ def _get_db_classes():
     if _create_database is None:
         import sys
         from pathlib import Path
-        root = Path(__file__).parent.parent.parent
+        root = Path(__file__).parent.parent.parent.parent
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
         from api.database import Feature, create_database
@@ -199,7 +199,7 @@ async def preview_feature_split(project_name: str, feature: FeatureCreate):
     project_name = validate_project_name(project_name)
 
     # Import feature_splitter from lib
-    root = Path(__file__).parent.parent.parent
+    root = Path(__file__).parent.parent.parent.parent
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 

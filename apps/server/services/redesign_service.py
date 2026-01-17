@@ -27,7 +27,7 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 # Add parent directories to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from api.database import RedesignSession, RedesignApproval
 

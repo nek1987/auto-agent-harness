@@ -27,7 +27,7 @@ from .skills_catalog import SkillMetadata
 
 logger = logging.getLogger(__name__)
 
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent.parent
 
 
 @dataclass

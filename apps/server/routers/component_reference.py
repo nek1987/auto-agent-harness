@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from registry import get_project_path
-from server.services.component_reference_service import ComponentReferenceService
+from ..services.component_reference_service import ComponentReferenceService
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def _get_db_classes():
     if _create_database is None:
         import sys
         from pathlib import Path
-        root = Path(__file__).parent.parent.parent
+        root = Path(__file__).parent.parent.parent.parent
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
         from api.database import ComponentReferenceSession, create_database
@@ -555,7 +555,7 @@ async def generate_features(
 
     # Lazy import to avoid circular dependencies
     import sys
-    root = Path(__file__).parent.parent.parent
+    root = Path(__file__).parent.parent.parent.parent
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
     from api.database import Feature, PageReference

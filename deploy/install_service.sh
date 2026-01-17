@@ -26,7 +26,7 @@ echo "========================================"
 echo ""
 
 # Check if running from project root
-if [ ! -f "server/main.py" ]; then
+if [ ! -f "apps/server/main.py" ]; then
     echo -e "${RED}ERROR: Please run this script from the project root directory${NC}"
     echo "  cd /path/to/auto-agent-harness"
     echo "  ./deploy/install_service.sh"

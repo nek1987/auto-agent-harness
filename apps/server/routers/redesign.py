@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from registry import get_project_path
-from server.services.redesign_service import RedesignService
+from ..services.redesign_service import RedesignService
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def _get_db_classes():
     if _create_database is None:
         import sys
         from pathlib import Path
-        root = Path(__file__).parent.parent.parent
+        root = Path(__file__).parent.parent.parent.parent
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
         from api.database import Feature, RedesignSession, create_database

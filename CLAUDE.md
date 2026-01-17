@@ -71,17 +71,17 @@ python autonomous_agent_demo.py --project-dir my-app --yolo
 
 **When to use:** Early prototyping when you want to quickly scaffold features without verification overhead. Switch back to standard mode for production-quality development.
 
-### React UI (in ui/ directory)
+### React UI (in apps/ui/ directory)
 
 ```bash
-cd ui
+cd apps/ui
 npm install
 npm run dev      # Development server (hot reload)
 npm run build    # Production build (required for start_ui.bat)
 npm run lint     # Run ESLint
 ```
 
-**Note:** The `start_ui.bat` script serves the pre-built UI from `ui/dist/`. After making UI changes, run `npm run build` in the `ui/` directory.
+**Note:** The `start_ui.bat` script serves the pre-built UI from `apps/ui/dist/`. After making UI changes, run `npm run build` in the `apps/ui/` directory.
 
 ## Architecture
 
@@ -106,18 +106,18 @@ The registry uses:
 - POSIX path format (forward slashes) for cross-platform compatibility
 - SQLite's built-in transaction handling for concurrency safety
 
-### Server API (server/)
+### Server API (apps/server/)
 
 The FastAPI server provides REST endpoints for the UI:
 
-- `server/routers/auth.py` - Authentication (login/logout/refresh/user management)
-- `server/routers/projects.py` - Project CRUD with registry integration
-- `server/routers/features.py` - Feature management
-- `server/routers/agent.py` - Agent control (start/stop/pause/resume)
-- `server/routers/filesystem.py` - Filesystem browser API with security controls
-- `server/routers/spec_creation.py` - WebSocket for interactive spec creation
-- `server/lib/path_security.py` - Path validation and sandboxing
-- `server/services/auth_service.py` - JWT + bcrypt authentication service
+- `apps/server/routers/auth.py` - Authentication (login/logout/refresh/user management)
+- `apps/server/routers/projects.py` - Project CRUD with registry integration
+- `apps/server/routers/features.py` - Feature management
+- `apps/server/routers/agent.py` - Agent control (start/stop/pause/resume)
+- `apps/server/routers/filesystem.py` - Filesystem browser API with security controls
+- `apps/server/routers/spec_creation.py` - WebSocket for interactive spec creation
+- `apps/server/lib/path_security.py` - Path validation and sandboxing
+- `apps/server/services/auth_service.py` - JWT + bcrypt authentication service
 
 ### Feature Management
 
@@ -255,7 +255,7 @@ cp = cm.create("before_refactor", feature_id=42)
 cm.rollback(cp.id)  # Restore to checkpoint
 ```
 
-### React UI (ui/)
+### React UI (apps/ui/)
 
 - Tech stack: React 18, TypeScript, TanStack Query, Tailwind CSS v4, Radix UI, Zustand
 - `src/App.tsx` - Main app with auth protection, project selection, kanban board, agent controls
@@ -281,13 +281,13 @@ Projects can be stored in any directory (registered in `~/.auto-agent-harness/re
 
 Defense-in-depth approach with multiple layers:
 
-1. **Authentication** (`server/services/auth_service.py`, `server/routers/auth.py`)
+1. **Authentication** (`apps/server/services/auth_service.py`, `apps/server/routers/auth.py`)
    - JWT tokens with httpOnly cookies (XSS protection)
    - Access token (15 min) + Refresh token (7 days) rotation
    - bcrypt password hashing (12 rounds)
    - Rate limiting on login endpoint (5 attempts/minute)
 
-2. **Path Security** (`server/lib/path_security.py`)
+2. **Path Security** (`apps/server/lib/path_security.py`)
    - `ALLOWED_ROOT_DIRECTORY` restricts file operations to workspace
    - `DATA_DIR` always allowed for settings/users (exception)
    - Symlink validation to prevent escape attacks
@@ -298,7 +298,7 @@ Defense-in-depth approach with multiple layers:
    - Extra validation for dangerous commands (pkill, chmod)
    - OS-level sandbox for bash commands
 
-4. **Network Security** (`server/main.py`)
+4. **Network Security** (`apps/server/main.py`)
    - `REQUIRE_LOCALHOST` option for local-only access
    - CORS restricted to known origins
    - Auth middleware for all API endpoints
@@ -371,6 +371,6 @@ The UI receives updates via WebSocket (`/ws/projects/{project_name}`):
 ### Design System
 
 The UI uses a **neobrutalism** design with Tailwind CSS v4:
-- CSS variables defined in `ui/src/styles/globals.css` via `@theme` directive
+- CSS variables defined in `apps/ui/src/styles/globals.css` via `@theme` directive
 - Custom animations: `animate-slide-in`, `animate-pulse-neo`, `animate-shimmer`
 - Color tokens: `--color-neo-pending` (yellow), `--color-neo-progress` (cyan), `--color-neo-done` (green)

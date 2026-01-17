@@ -28,7 +28,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 # Add parent directories to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from api.database import (
     ComponentReferenceSession,
@@ -1267,7 +1267,7 @@ Analyze the files and return ONLY the JSON response, no additional text."""
             # Categorize by path patterns
             filepath_lower = filepath.lower()
             if "/components/" in filepath_lower or file_type == "component":
-                if any(x in filepath_lower for x in ["ui/", "primitives/", "common/"]):
+                if any(x in filepath_lower for x in ["apps/ui/", "ui/", "primitives/", "common/"]):
                     by_category["ui-primitives"].append(comp)
                 elif any(x in filepath_lower for x in ["form", "input", "select"]):
                     by_category["form-components"].append(comp)
