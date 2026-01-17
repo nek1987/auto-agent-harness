@@ -7,11 +7,13 @@ Uses project registry for path lookups instead of fixed generations/ directory.
 """
 
 import re
+import logging
 import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from ..services.process_manager import check_agent_lock
 from ..schemas import (
     ImportFeaturesRequest,
     ImportFeaturesResponse,
@@ -74,6 +76,7 @@ def _get_registry_functions():
 
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+logger = logging.getLogger(__name__)
 
 
 def validate_project_name(name: str) -> str:
@@ -238,12 +241,14 @@ async def delete_project(name: str, delete_files: bool = False):
         raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
 
     # Check if agent is running
-    lock_file = project_dir / ".agent.lock"
-    if lock_file.exists():
+    is_running, lock_cleared = check_agent_lock(project_dir)
+    if is_running:
         raise HTTPException(
             status_code=409,
             detail="Cannot delete project while agent is running. Stop the agent first."
         )
+    if lock_cleared:
+        logger.info("Cleared stale agent lock for project %s", name)
 
     # Optionally delete files
     if delete_files and project_dir.exists():
@@ -367,12 +372,14 @@ async def import_project_features(name: str, import_data: ImportFeaturesRequest)
         raise HTTPException(status_code=404, detail="Project directory not found")
 
     # Check if agent is running
-    lock_file = project_dir / ".agent.lock"
-    if lock_file.exists():
+    is_running, lock_cleared = check_agent_lock(project_dir)
+    if is_running:
         raise HTTPException(
             status_code=409,
             detail="Cannot import features while agent is running. Stop the agent first."
         )
+    if lock_cleared:
+        logger.info("Cleared stale agent lock for project %s", name)
 
     # Import features using the database module
     try:

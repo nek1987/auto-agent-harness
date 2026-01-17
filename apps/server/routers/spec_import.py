@@ -18,6 +18,8 @@ from typing import Optional
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
+from ..services.process_manager import check_agent_lock
+
 # Lazy imports to avoid circular dependencies
 _imports_initialized = False
 _validate_spec_structure = None
@@ -285,8 +287,8 @@ async def import_spec_to_project(
         )
 
     # Check if agent is running
-    lock_file = project_dir / ".agent.lock"
-    if lock_file.exists():
+    is_running, _ = check_agent_lock(project_dir)
+    if is_running:
         raise HTTPException(
             status_code=409,
             detail="Cannot import spec while agent is running. Stop the agent first."
@@ -367,8 +369,8 @@ async def upload_spec_file(
         )
 
     # Check if agent is running
-    lock_file = project_dir / ".agent.lock"
-    if lock_file.exists():
+    is_running, _ = check_agent_lock(project_dir)
+    if is_running:
         raise HTTPException(
             status_code=409,
             detail="Cannot upload spec while agent is running. Stop the agent first."

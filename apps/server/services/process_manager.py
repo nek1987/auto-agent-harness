@@ -478,6 +478,42 @@ class AgentProcessManager:
 _managers: dict[str, AgentProcessManager] = {}
 _managers_lock = threading.Lock()
 
+def check_agent_lock(project_dir: Path) -> tuple[bool, bool]:
+    """
+    Check whether an agent lock is active and clear stale locks.
+
+    Returns:
+        (is_running, lock_cleared)
+    """
+    lock_file = project_dir / ".agent.lock"
+    if not lock_file.exists():
+        return False, False
+
+    try:
+        pid = int(lock_file.read_text().strip())
+    except (ValueError, OSError):
+        lock_file.unlink(missing_ok=True)
+        return False, True
+
+    if not psutil.pid_exists(pid):
+        lock_file.unlink(missing_ok=True)
+        return False, True
+
+    try:
+        proc = psutil.Process(pid)
+        cmdline = " ".join(proc.cmdline())
+        if "autonomous_agent_demo.py" not in cmdline:
+            lock_file.unlink(missing_ok=True)
+            return False, True
+    except psutil.NoSuchProcess:
+        lock_file.unlink(missing_ok=True)
+        return False, True
+    except psutil.AccessDenied:
+        # Unable to verify, assume running to be safe
+        return True, False
+
+    return True, False
+
 
 def get_manager(project_name: str, project_dir: Path, root_dir: Path) -> AgentProcessManager:
     """Get or create a process manager for a project (thread-safe).
