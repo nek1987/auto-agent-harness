@@ -75,6 +75,7 @@ class AgentProcessManager:
         self._output_task: asyncio.Task | None = None
         self.yolo_mode: bool = False  # YOLO mode for rapid prototyping
         self.mode: str | None = None  # Optional run mode (e.g., regression)
+        self.model: str | None = None  # Optional model override
 
         # Support multiple callbacks (for multiple WebSocket clients)
         self._output_callbacks: Set[Callable[[str], Awaitable[None]]] = set()
@@ -285,6 +286,7 @@ class AgentProcessManager:
         yolo_mode: bool = False,
         auto_start_docker: bool = True,
         mode: str | None = None,
+        model: str | None = None,
     ) -> tuple[bool, str]:
         """
         Start the agent as a subprocess.
@@ -311,6 +313,7 @@ class AgentProcessManager:
         # Store mode for status queries
         self.yolo_mode = yolo_mode
         self.mode = mode
+        self.model = model
 
         # Build command - pass absolute path to project directory
         cmd = [
@@ -326,6 +329,9 @@ class AgentProcessManager:
 
         if mode:
             cmd.extend(["--mode", mode])
+
+        if model:
+            cmd.extend(["--model", model])
 
         try:
             # Start subprocess with piped stdout/stderr

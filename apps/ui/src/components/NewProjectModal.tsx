@@ -15,6 +15,7 @@ import { useCreateProject } from '../hooks/useProjects'
 import { SpecCreationChat } from './SpecCreationChat'
 import { FolderBrowser } from './FolderBrowser'
 import { startAgent } from '../lib/api'
+import { getAgentModel } from '../lib/agentSettings'
 
 type InitializerStatus = 'idle' | 'starting' | 'error'
 
@@ -123,7 +124,7 @@ export function NewProjectModal({
     // Auto-start the initializer agent
     setInitializerStatus('starting')
     try {
-      await startAgent(projectName.trim(), { yoloMode })
+      await startAgent(projectName.trim(), { yoloMode, model: getAgentModel(projectName.trim()) })
       // Success - navigate to project
       setStep('complete')
       setTimeout(() => {

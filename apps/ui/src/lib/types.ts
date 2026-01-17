@@ -100,6 +100,7 @@ export interface AgentStatusResponse {
   started_at: string | null
   yolo_mode: boolean
   mode?: string | null
+  model?: string | null
 }
 
 export interface AgentActionResponse {

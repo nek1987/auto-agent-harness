@@ -43,12 +43,12 @@ SKILL_CATEGORIES: dict[str, list[str]] = {
     ],
     # Coding mode - general development
     "coding": [
-        "frontend-design",
-        "frontend-aesthetics",
         "senior-fullstack",
         "senior-frontend",
         "senior-backend",
-        "code-reviewer",
+        "clean-code",
+        "env-manager",
+        "test-driven-development",
     ],
     # Architecture mode - system design
     "architecture": [

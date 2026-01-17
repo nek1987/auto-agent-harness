@@ -135,6 +135,7 @@ async def get_agent_status(project_name: str):
         started_at=manager.started_at,
         yolo_mode=manager.yolo_mode,
         mode=manager.mode,
+        model=manager.model,
     )
 
 
@@ -146,7 +147,11 @@ async def start_agent(
     """Start the agent for a project."""
     manager = get_project_manager(project_name)
 
-    success, message = await manager.start(yolo_mode=request.yolo_mode, mode=request.mode)
+    success, message = await manager.start(
+        yolo_mode=request.yolo_mode,
+        mode=request.mode,
+        model=request.model,
+    )
 
     if success and request.mode == "redesign":
         project_dir = _get_project_path(project_name)

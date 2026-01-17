@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { ActivityPanel } from '../ActivityPanel'
 import { AgentThought } from '../AgentThought'
+import { getAgentModel } from '../../lib/agentSettings'
 import { ReferenceUploader } from './ReferenceUploader'
 import { DesignTokenPreview } from './DesignTokenPreview'
 import { ChangePlanViewer } from './ChangePlanViewer'
@@ -208,7 +209,11 @@ export function RedesignWizard({
       const response = await fetch(`/api/projects/${projectName}/agent/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ yolo_mode: true, mode: 'redesign' }),
+        body: JSON.stringify({
+          yolo_mode: true,
+          mode: 'redesign',
+          model: getAgentModel(projectName, 'redesign'),
+        }),
       })
       if (response.ok) {
         setCurrentStep('tokens')
@@ -278,7 +283,10 @@ export function RedesignWizard({
       const response = await fetch(`/api/projects/${projectName}/agent/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ yolo_mode: false }),
+        body: JSON.stringify({
+          yolo_mode: false,
+          model: getAgentModel(projectName, 'coding'),
+        }),
       })
       if (response.ok) {
         onClose()

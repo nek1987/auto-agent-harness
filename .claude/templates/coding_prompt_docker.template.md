@@ -8,6 +8,13 @@ All code execution MUST happen inside Docker containers. The host system must re
 
 {{SKILLS_CONTEXT}}
 
+### ENGINEERING GUARDRAILS (ALL WORK)
+
+- **No hardcoded URLs, keys, or secrets.** Use environment variables + a config module. Update `.env.example` for every new setting.
+- **Single source of config truth.** Centralize base URLs, feature flags, and timeouts in one config file.
+- **Clean code baseline.** Small functions, early returns, clear naming, no deep nesting.
+- **TDD is mandatory for code-level logic.** Write or extend tests BEFORE implementation for backend/business logic. If no test framework exists, add the minimal setup for the stack and document it. Browser automation is still required for UI verification.
+
 ### DESIGN QUALITY GUARDRAIL (UI WORK ONLY)
 
 If the feature touches UI/UX, avoid generic "AI-slop" layouts. Use intentional typography, a clear visual direction, and purposeful spacing. Prefer distinctive, reference-aligned design decisions over default stacks.

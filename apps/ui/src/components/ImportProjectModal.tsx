@@ -26,6 +26,7 @@ import {
 import { useCreateProject } from '../hooks/useProjects'
 import { FolderBrowser } from './FolderBrowser'
 import { importFeatures, startAgent } from '../lib/api'
+import { getAgentModel } from '../lib/agentSettings'
 
 type Step = 'name' | 'folder' | 'mode' | 'importing' | 'complete'
 type ImportMode = 'quick' | 'analysis' | 'fresh'
@@ -110,7 +111,7 @@ export function ImportProjectModal({
       } else if (mode === 'analysis') {
         // Analysis mode: start agent with analysis mode
         setImportStatus('Starting analysis agent...')
-        await startAgent(projectName.trim(), { yoloMode: false })
+        await startAgent(projectName.trim(), { yoloMode: false, model: getAgentModel(projectName.trim()) })
         setStep('complete')
         setTimeout(() => {
           onProjectCreated(projectName.trim())

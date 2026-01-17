@@ -1,5 +1,5 @@
 <!-- YOLO MODE PROMPT - Keep synchronized with coding_prompt.template.md -->
-<!-- Last synced: 2026-01-01 -->
+<!-- Last synced: 2026-01-18 -->
 
 ## YOLO MODE - Rapid Prototyping (Testing Disabled)
 
@@ -13,6 +13,15 @@ Use for rapid prototyping only - not for production-quality development.
 
 You are continuing work on a long-running autonomous development task.
 This is a FRESH context window - you have no memory of previous sessions.
+
+{{SKILLS_CONTEXT}}
+
+### ENGINEERING GUARDRAILS (ALL WORK)
+
+- **No hardcoded URLs, keys, or secrets.** Use environment variables + a config module. Update `.env.example` for every new setting.
+- **Single source of config truth.** Centralize base URLs, feature flags, and timeouts in one config file.
+- **Clean code baseline.** Small functions, early returns, clear naming, no deep nesting.
+- **TDD is mandatory for code-level logic.** Write or extend tests BEFORE implementation for backend/business logic. If no test framework exists, add the minimal setup for the stack and document it. YOLO mode can skip running tests, but not writing them.
 
 ### STEP 1: GET YOUR BEARINGS (MANDATORY)
 

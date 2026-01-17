@@ -111,6 +111,10 @@ Agent modes:
 - Standard: full checks and regression.
 - YOLO: faster, skips heavy verification (good for prototypes).
 
+Agent model:
+- Use the **Model** field in the agent controls to choose which Claude model runs the session.
+- The selection is stored per project and reused for future starts (including redesign runs).
+
 ### 4) Redesign with References
 
 The redesign wizard creates a plan based on visual references and then applies it via the agent.

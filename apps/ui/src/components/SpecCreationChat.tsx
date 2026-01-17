@@ -13,6 +13,7 @@ import { QuestionOptions } from './QuestionOptions'
 import { TypingIndicator } from './TypingIndicator'
 import type { ImageAttachment, TextAttachment, Attachment } from '../lib/types'
 import { isImageAttachment, isTextAttachment } from '../lib/types'
+import { AGENT_MODEL_OPTIONS, getAgentModel, setAgentModel } from '../lib/agentSettings'
 
 // File upload validation constants
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5 MB for images
@@ -56,6 +57,7 @@ export function SpecCreationChat({
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [yoloEnabled, setYoloEnabled] = useState(false)
+  const [model, setModel] = useState(() => getAgentModel(projectName))
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -86,6 +88,10 @@ export function SpecCreationChat({
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    setModel(getAgentModel(projectName))
+  }, [projectName])
+
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -97,6 +103,11 @@ export function SpecCreationChat({
       inputRef.current.focus()
     }
   }, [isLoading, currentQuestions])
+
+  const handleModelChange = (value: string) => {
+    setModel(value)
+    setAgentModel(projectName, value)
+  }
 
   const handleSendMessage = () => {
     const trimmed = input.trim()
@@ -491,6 +502,23 @@ export function SpecCreationChat({
               )}
               {initializerStatus === 'idle' && (
                 <>
+                  <div className="flex items-center gap-2 bg-white border-2 border-[var(--color-neo-border)] px-3 py-2">
+                    <span className="font-display font-bold text-xs uppercase text-[var(--color-neo-text-secondary)]">
+                      Model
+                    </span>
+                    <input
+                      className="neo-input h-8 text-xs min-w-[200px]"
+                      list={`spec-models-${projectName}`}
+                      value={model}
+                      onChange={(event) => handleModelChange(event.target.value)}
+                      placeholder="claude-opus-4-5-20251101"
+                    />
+                    <datalist id={`spec-models-${projectName}`}>
+                      {AGENT_MODEL_OPTIONS.map(option => (
+                        <option key={option} value={option} />
+                      ))}
+                    </datalist>
+                  </div>
                   {/* YOLO Mode Toggle */}
                   <button
                     onClick={() => setYoloEnabled(!yoloEnabled)}

@@ -134,6 +134,7 @@ export async function getAgentStatus(projectName: string): Promise<AgentStatusRe
 export interface StartAgentOptions {
   yoloMode?: boolean
   mode?: string | null
+  model?: string | null
 }
 
 export async function startAgent(
@@ -145,6 +146,7 @@ export async function startAgent(
     body: JSON.stringify({
       yolo_mode: options.yoloMode ?? false,
       mode: options.mode ?? null,
+      model: options.model ?? null,
     }),
   })
 }

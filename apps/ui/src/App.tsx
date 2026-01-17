@@ -6,6 +6,7 @@ import { useFeatureSound } from './hooks/useFeatureSound'
 import { useCelebration } from './hooks/useCelebration'
 import { useAuthStore, setupTokenRefresh } from './lib/auth'
 import { startAgent } from './lib/api'
+import { getAgentModel } from './lib/agentSettings'
 import { LoginForm } from './components/LoginForm'
 
 const STORAGE_KEY = 'auto-agent-harness-selected-project'
@@ -101,7 +102,7 @@ function App() {
     // Auto-start the initializer agent
     if (selectedProject) {
       try {
-        await startAgent(selectedProject, { yoloMode: false })
+        await startAgent(selectedProject, { yoloMode: false, model: getAgentModel(selectedProject) })
       } catch (err) {
         console.error('Failed to start agent after spec import:', err)
       }
@@ -116,7 +117,7 @@ function App() {
     // Auto-start the initializer agent
     if (selectedProject) {
       try {
-        await startAgent(selectedProject, { yoloMode })
+        await startAgent(selectedProject, { yoloMode, model: getAgentModel(selectedProject) })
       } catch (err) {
         console.error('Failed to start agent after spec creation:', err)
       }
