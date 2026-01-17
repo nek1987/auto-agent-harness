@@ -146,6 +146,13 @@ class SpecChatSession:
         project_path = str(self.project_dir.resolve())
         system_prompt = skill_content.replace("$ARGUMENTS", project_path)
 
+        # Inject skills context for spec creation
+        skills_context = get_skills_context(ROOT_DIR, "spec_creation")
+        if "{{SKILLS_CONTEXT}}" in system_prompt:
+            system_prompt = system_prompt.replace("{{SKILLS_CONTEXT}}", skills_context)
+        else:
+            system_prompt = f"{skills_context}\n\n{system_prompt}"
+
         # Create Claude SDK client with limited tools for spec creation
         # Use Opus for best quality spec generation
         # Use system CLI to avoid bundled Bun runtime crash (exit code 3) on Windows

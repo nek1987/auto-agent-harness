@@ -125,9 +125,10 @@ The system uses architectural layers (0-8) to ensure proper implementation seque
 |12 | Responsive & Layout              | 8     | 6      | 8      | 12      |
 |13 | Accessibility                    | 8     | 6      | 8      | 12      |
 |14 | Performance                      | 8     | 5      | 5      | 8       |
-|   | **TOTAL**                        |       |**~135**|**~215**|**~345** |
+|15 | Documentation & Handoff          | 8     | 3      | 5      | 8       |
+|   | **TOTAL**                        |       |**~138**|**~220**|**~353** |
 
-**CRITICAL: Create features in this EXACT order (0 → 14). The API assigns arch_layer based on category.**
+**CRITICAL: Create features in this EXACT order (0 → 15). The API assigns arch_layer based on category.**
 
 ---
 
@@ -396,6 +397,20 @@ Test basic performance requirements.
 - Page loads in <3s with 100 records
 - Search responds in <1s
 - No console errors during operation
+
+### 15. Documentation & Handoff Tests (Layer 8: QUALITY)
+
+Verify project documentation is complete and consistent with the spec.
+
+**Use category: "documentation" or "docs"**
+
+**Required tests (examples):**
+
+- docs/OVERVIEW.md exists and summarizes the product scope
+- docs/ARCHITECTURE.md matches the implemented data flow and services
+- docs/API.md lists all implemented endpoints with request/response details
+- docs/RUNBOOK.md includes start/stop, env vars, and troubleshooting steps
+- docs/CONTEXT.md captures key decisions, constraints, and open questions
 
 ---
 

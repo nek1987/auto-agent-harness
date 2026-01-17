@@ -112,6 +112,15 @@ SKILL_CATEGORIES: dict[str, list[str]] = {
         "senior-architect",
         "product-manager-toolkit",
     ],
+    # Spec creation mode - for generating app specs via guided conversation
+    "spec_creation": [
+        "senior-architect",
+        "product-manager-toolkit",
+        "ui-ux-pro-max",
+        "frontend-design",
+        "senior-fullstack",
+        "senior-frontend",
+    ],
     # Spec analysis mode - for analyzing uploaded app-specs
     # Uses architect for structure, product-manager for requirements quality,
     # and CTO for tech stack evaluation
