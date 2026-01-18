@@ -15,6 +15,7 @@ import { KanbanBoard } from './components/KanbanBoard'
 import { AgentControl } from './components/AgentControl'
 import { ProgressDashboard } from './components/ProgressDashboard'
 import { ProjectHealthPanel } from './components/ProjectHealthPanel'
+import { AgentSettingsPanel } from './components/AgentSettingsPanel'
 import { SetupWizard } from './components/SetupWizard'
 import { AddFeatureForm } from './components/AddFeatureForm'
 import { FeatureModal } from './components/FeatureModal'
@@ -102,7 +103,7 @@ function App() {
     // Auto-start the initializer agent
     if (selectedProject) {
       try {
-        await startAgent(selectedProject, { yoloMode: false, model: getAgentModel(selectedProject) })
+        await startAgent(selectedProject, { yoloMode: false, model: getAgentModel(selectedProject, 'coding') })
       } catch (err) {
         console.error('Failed to start agent after spec import:', err)
       }
@@ -117,7 +118,7 @@ function App() {
     // Auto-start the initializer agent
     if (selectedProject) {
       try {
-        await startAgent(selectedProject, { yoloMode, model: getAgentModel(selectedProject) })
+        await startAgent(selectedProject, { yoloMode, model: getAgentModel(selectedProject, 'coding') })
       } catch (err) {
         console.error('Failed to start agent after spec creation:', err)
       }
@@ -336,6 +337,8 @@ function App() {
               />
 
               <ProjectHealthPanel projectName={selectedProject} />
+
+              <AgentSettingsPanel projectName={selectedProject} />
 
               {/* Agent Thought - shows latest agent narrative */}
               <AgentThought

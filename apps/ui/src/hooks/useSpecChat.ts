@@ -10,6 +10,7 @@ type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
 interface UseSpecChatOptions {
   projectName: string
+  model?: string | null
   onComplete?: (specPath: string) => void
   onError?: (error: string) => void
 }
@@ -33,6 +34,7 @@ function generateId(): string {
 
 export function useSpecChat({
   projectName,
+  model,
   onComplete,
   onError,
 }: UseSpecChatOptions): UseSpecChatReturn {
@@ -355,14 +357,18 @@ export function useSpecChat({
     const checkAndSend = () => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         setIsLoading(true)
-        wsRef.current.send(JSON.stringify({ type: 'start' }))
+        const payload: Record<string, unknown> = { type: 'start' }
+        if (model) {
+          payload.model = model
+        }
+        wsRef.current.send(JSON.stringify(payload))
       } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
         setTimeout(checkAndSend, 100)
       }
     }
 
     setTimeout(checkAndSend, 100)
-  }, [connect])
+  }, [connect, model])
 
   const sendMessage = useCallback((content: string, attachments?: ImageAttachment[], textAttachments?: TextAttachment[]) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {

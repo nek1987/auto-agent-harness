@@ -124,7 +124,7 @@ export function NewProjectModal({
     // Auto-start the initializer agent
     setInitializerStatus('starting')
     try {
-      await startAgent(projectName.trim(), { yoloMode, model: getAgentModel(projectName.trim()) })
+      await startAgent(projectName.trim(), { yoloMode, model: getAgentModel(projectName.trim(), 'coding') })
       // Success - navigate to project
       setStep('complete')
       setTimeout(() => {

@@ -25,6 +25,8 @@ from lib.skills_loader import get_skills_context
 
 logger = logging.getLogger(__name__)
 
+# Default model for spec creation (can be overridden per session)
+DEFAULT_SPEC_MODEL = "claude-opus-4-5-20251101"
 
 async def _make_multimodal_message(content_blocks: list[dict]) -> AsyncGenerator[dict, None]:
     """
@@ -60,16 +62,18 @@ class SpecChatSession:
     - Phase 6-7: Success Criteria & Approval
     """
 
-    def __init__(self, project_name: str, project_dir: Path):
+    def __init__(self, project_name: str, project_dir: Path, model: Optional[str] = None):
         """
         Initialize the session.
 
         Args:
             project_name: Name of the project being created
             project_dir: Absolute path to the project directory
+            model: Optional Claude model override for spec creation
         """
         self.project_name = project_name
         self.project_dir = project_dir
+        self.model = model or DEFAULT_SPEC_MODEL
         self.client: Optional[ClaudeSDKClient] = None
         self.messages: list[dict] = []
         self.complete: bool = False
@@ -160,7 +164,7 @@ class SpecChatSession:
         try:
             self.client = ClaudeSDKClient(
                 options=ClaudeAgentOptions(
-                    model="claude-opus-4-5-20251101",
+                    model=self.model,
                     cli_path=system_cli,
                     system_prompt=system_prompt,
                     allowed_tools=[
@@ -522,19 +526,24 @@ def get_session(project_name: str) -> Optional[SpecChatSession]:
         return _sessions.get(project_name)
 
 
-async def create_session(project_name: str, project_dir: Path) -> SpecChatSession:
+async def create_session(
+    project_name: str,
+    project_dir: Path,
+    model: Optional[str] = None
+) -> SpecChatSession:
     """Create a new session for a project, closing any existing one.
 
     Args:
         project_name: Name of the project
         project_dir: Absolute path to the project directory
+        model: Optional Claude model override for the session
     """
     old_session: Optional[SpecChatSession] = None
 
     with _sessions_lock:
         # Get existing session to close later (outside the lock)
         old_session = _sessions.pop(project_name, None)
-        session = SpecChatSession(project_name, project_dir)
+        session = SpecChatSession(project_name, project_dir, model=model)
         _sessions[project_name] = session
 
     # Close old session outside the lock to avoid blocking

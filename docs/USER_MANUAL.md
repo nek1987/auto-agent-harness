@@ -112,8 +112,8 @@ Agent modes:
 - YOLO: faster, skips heavy verification (good for prototypes).
 
 Agent model:
-- Use the **Model** field in the agent controls to choose which Claude model runs the session.
-- The selection is stored per project and reused for future starts (including redesign runs).
+- Open **Agent Settings** in the project view to set models for spec creation, spec analysis, coding/initializer, and redesign planning.
+- Settings are stored per project (locally) and used on the next run of each stage.
 
 ### 4) Redesign with References
 

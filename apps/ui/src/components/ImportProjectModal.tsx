@@ -111,7 +111,7 @@ export function ImportProjectModal({
       } else if (mode === 'analysis') {
         // Analysis mode: start agent with analysis mode
         setImportStatus('Starting analysis agent...')
-        await startAgent(projectName.trim(), { yoloMode: false, model: getAgentModel(projectName.trim()) })
+        await startAgent(projectName.trim(), { yoloMode: false, model: getAgentModel(projectName.trim(), 'coding') })
         setStep('complete')
         setTimeout(() => {
           onProjectCreated(projectName.trim())

@@ -69,9 +69,11 @@ def _get_registry_functions():
     return get_project_path
 
 
-def _get_analyzer():
+def _get_analyzer(model: Optional[str] = None):
     """Get SpecAnalyzer with lazy import."""
     from ..services.spec_analyzer import SpecAnalyzer
+    if model:
+        return SpecAnalyzer(model=model)
     return SpecAnalyzer()
 
 
@@ -111,6 +113,7 @@ class ValidateSpecResponse(BaseModel):
 class AnalyzeSpecRequest(BaseModel):
     """Request to analyze spec content with Claude."""
     spec_content: str = Field(..., description="The spec content to analyze")
+    analysis_model: Optional[str] = Field(default=None, description="Claude model override")
 
 
 class AnalyzeSpecResponse(BaseModel):
@@ -155,6 +158,7 @@ class RefineSpecRequest(BaseModel):
     """Request to refine spec based on feedback."""
     spec_content: str = Field(..., description="Current spec content")
     feedback: str = Field(..., description="User feedback for refinement")
+    analysis_model: Optional[str] = Field(default=None, description="Claude model override")
 
 
 class RefineSpecResponse(BaseModel):
@@ -169,6 +173,12 @@ class EnhanceSpecResponse(BaseModel):
     enhanced_spec: str
     changes_made: list[str]
     message: str
+
+
+class EnhanceSpecRequest(BaseModel):
+    """Request to enhance an incomplete spec."""
+    spec_content: str = Field(..., description="Spec content to enhance")
+    analysis_model: Optional[str] = Field(default=None, description="Claude model override")
 
 
 # ============================================================================
@@ -221,7 +231,7 @@ async def analyze_spec(request: AnalyzeSpecRequest):
     _init_imports()
 
     # Get analyzer
-    analyzer = _get_analyzer()
+    analyzer = _get_analyzer(request.analysis_model)
 
     try:
         result = await analyzer.analyze(request.spec_content)
@@ -444,7 +454,7 @@ async def refine_spec(request: RefineSpecRequest):
     Uses Claude to generate an improved version of the spec
     incorporating the user's feedback.
     """
-    analyzer = _get_analyzer()
+    analyzer = _get_analyzer(request.analysis_model)
 
     try:
         refined_spec = await analyzer.suggest_refinements(
@@ -463,7 +473,7 @@ async def refine_spec(request: RefineSpecRequest):
 
 
 @router.post("/enhance", response_model=EnhanceSpecResponse)
-async def enhance_spec(request: ValidateSpecRequest):
+async def enhance_spec(request: EnhanceSpecRequest):
     """
     Enhance an incomplete spec using Claude.
 
@@ -472,7 +482,7 @@ async def enhance_spec(request: ValidateSpecRequest):
     This is used for auto-enhancement when a user uploads
     an incomplete or minimal spec.
     """
-    analyzer = _get_analyzer()
+    analyzer = _get_analyzer(request.analysis_model)
 
     try:
         result = await analyzer.enhance_spec(request.spec_content)

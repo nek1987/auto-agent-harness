@@ -344,10 +344,16 @@ export async function validateSpec(specContent: string): Promise<SpecValidationR
   })
 }
 
-export async function analyzeSpec(specContent: string): Promise<SpecAnalysisResponse> {
+export async function analyzeSpec(
+  specContent: string,
+  analysisModel?: string | null
+): Promise<SpecAnalysisResponse> {
   return fetchJSON('/spec/analyze', {
     method: 'POST',
-    body: JSON.stringify({ spec_content: specContent }),
+    body: JSON.stringify({
+      spec_content: specContent,
+      analysis_model: analysisModel ?? null,
+    }),
   })
 }
 
@@ -398,11 +404,16 @@ export async function uploadSpecFile(
 
 export async function refineSpec(
   specContent: string,
-  feedback: string
+  feedback: string,
+  analysisModel?: string | null
 ): Promise<SpecRefineResponse> {
   return fetchJSON('/spec/refine', {
     method: 'POST',
-    body: JSON.stringify({ spec_content: specContent, feedback }),
+    body: JSON.stringify({
+      spec_content: specContent,
+      feedback,
+      analysis_model: analysisModel ?? null,
+    }),
   })
 }
 
@@ -412,9 +423,15 @@ export interface EnhanceSpecResponse {
   message: string
 }
 
-export async function enhanceSpec(specContent: string): Promise<EnhanceSpecResponse> {
+export async function enhanceSpec(
+  specContent: string,
+  analysisModel?: string | null
+): Promise<EnhanceSpecResponse> {
   return fetchJSON('/spec/enhance', {
     method: 'POST',
-    body: JSON.stringify({ spec_content: specContent }),
+    body: JSON.stringify({
+      spec_content: specContent,
+      analysis_model: analysisModel ?? null,
+    }),
   })
 }

@@ -170,7 +170,7 @@ async def spec_chat_websocket(websocket: WebSocket, project_name: str):
     Message protocol:
 
     Client -> Server:
-    - {"type": "start"} - Start the spec creation session
+    - {"type": "start", "model": "claude-..."} - Start the spec creation session (optional model override)
     - {"type": "message", "content": "...", "attachments": [...], "text_attachments": [...]}
       - attachments: Optional image files [{filename, mimeType, base64Data}]
       - text_attachments: Optional text files for spec analysis [{filename, mimeType, content}]
@@ -218,7 +218,9 @@ async def spec_chat_websocket(websocket: WebSocket, project_name: str):
 
                 elif msg_type == "start":
                     # Create and start a new session
-                    session = await create_session(project_name, project_dir)
+                    raw_model = message.get("model")
+                    model = raw_model.strip() if isinstance(raw_model, str) and raw_model.strip() else None
+                    session = await create_session(project_name, project_dir, model=model)
 
                     # Track spec completion state
                     spec_complete_received = False

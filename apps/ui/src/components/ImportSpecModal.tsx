@@ -31,6 +31,7 @@ import {
   type SpecAnalysisResponse,
 } from '../lib/api'
 import { SpecAnalysisReport, type SuggestionDecisions } from './SpecAnalysisReport'
+import { getAgentModel } from '../lib/agentSettings'
 
 type Step = 'upload' | 'validating' | 'enhancing' | 'review' | 'analyzing' | 'refining' | 'importing' | 'complete'
 
@@ -55,6 +56,7 @@ export function ImportSpecModal({
   const [error, setError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [importPath, setImportPath] = useState<string>('')
+  const analysisModel = getAgentModel(projectName, 'spec_analysis')
 
   const handleClose = useCallback(() => {
     setStep('upload')
@@ -109,7 +111,7 @@ export function ImportSpecModal({
       if (result.score < 60 || !result.is_valid) {
         setStep('enhancing')
         try {
-          const enhanced = await enhanceSpec(content)
+          const enhanced = await enhanceSpec(content, analysisModel)
           setSpecContent(enhanced.enhanced_spec)
           // Re-validate the enhanced spec
           const newValidation = await validateSpec(enhanced.enhanced_spec)
@@ -142,7 +144,7 @@ export function ImportSpecModal({
     setError(null)
 
     try {
-      const result = await analyzeSpec(specContent)
+      const result = await analyzeSpec(specContent, analysisModel)
       setAnalysis(result)
       setValidation(result.validation)
       setStep('review')
@@ -182,7 +184,7 @@ export function ImportSpecModal({
     const feedback = feedbackParts.join('\n\n')
 
     try {
-      const result = await refineSpec(specContent, feedback)
+      const result = await refineSpec(specContent, feedback, analysisModel)
       if (result.success && result.refined_spec) {
         // Update spec content with refined version
         setSpecContent(result.refined_spec)

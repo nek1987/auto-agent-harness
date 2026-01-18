@@ -6,7 +6,7 @@ import {
   usePauseAgent,
   useResumeAgent,
 } from '../hooks/useProjects'
-import { AGENT_MODEL_OPTIONS, getAgentModel, setAgentModel } from '../lib/agentSettings'
+import { getAgentModel } from '../lib/agentSettings'
 import type { AgentStatus } from '../lib/types'
 
 interface AgentControlProps {
@@ -20,7 +20,6 @@ interface AgentControlProps {
 export function AgentControl({ projectName, status, yoloMode = false, mode, lastLogTimestamp }: AgentControlProps) {
   const [yoloEnabled, setYoloEnabled] = useState(false)
   const [idleSeconds, setIdleSeconds] = useState(0)
-  const [model, setModel] = useState(() => getAgentModel(projectName))
 
   // Update idle timer every second when agent is running
   useEffect(() => {
@@ -40,10 +39,6 @@ export function AgentControl({ projectName, status, yoloMode = false, mode, last
     return () => clearInterval(interval)
   }, [status, lastLogTimestamp])
 
-  useEffect(() => {
-    setModel(getAgentModel(projectName))
-  }, [projectName])
-
   const startAgent = useStartAgent(projectName)
   const stopAgent = useStopAgent(projectName)
   const pauseAgent = usePauseAgent(projectName)
@@ -55,40 +50,22 @@ export function AgentControl({ projectName, status, yoloMode = false, mode, last
     pauseAgent.isPending ||
     resumeAgent.isPending
 
-  const handleStart = () => startAgent.mutate({ yoloMode: yoloEnabled, model })
+  const handleStart = () => startAgent.mutate({
+    yoloMode: yoloEnabled,
+    model: getAgentModel(projectName, 'coding'),
+  })
   const handleStop = () => stopAgent.mutate()
   const handlePause = () => pauseAgent.mutate()
   const handleResume = () => resumeAgent.mutate()
-  const handleRegression = () => startAgent.mutate({ mode: 'regression', model })
-
-  const handleModelChange = (value: string) => {
-    setModel(value)
-    setAgentModel(projectName, value)
-  }
+  const handleRegression = () => startAgent.mutate({
+    mode: 'regression',
+    model: getAgentModel(projectName, 'coding'),
+  })
 
   return (
     <div className="flex items-center gap-2">
       {/* Status Indicator */}
       <StatusIndicator status={status} />
-
-      <div className="flex items-center gap-2 px-3 py-2 bg-white border-3 border-[var(--color-neo-border)]">
-        <span className="font-display font-bold text-xs uppercase text-[var(--color-neo-text-secondary)]">
-          Model
-        </span>
-        <input
-          className="neo-input h-8 text-xs min-w-[220px]"
-          list={`agent-models-${projectName}`}
-          value={model}
-          onChange={(event) => handleModelChange(event.target.value)}
-          placeholder="claude-opus-4-5-20251101"
-          disabled={status === 'running' || status === 'paused'}
-        />
-        <datalist id={`agent-models-${projectName}`}>
-          {AGENT_MODEL_OPTIONS.map(option => (
-            <option key={option} value={option} />
-          ))}
-        </datalist>
-      </div>
 
       {/* Idle Timer Warning - shown when agent is idle for too long */}
       {status === 'running' && idleSeconds > 30 && (
