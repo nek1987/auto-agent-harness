@@ -96,6 +96,7 @@ class FeatureResponse(FeatureBase):
     item_type: str = "feature"
     parent_bug_id: int | None = None
     bug_status: str | None = None
+    review_status: str | None = None
     assigned_skills: list[str] | None = None
 
     class Config:

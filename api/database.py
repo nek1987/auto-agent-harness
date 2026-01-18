@@ -40,6 +40,7 @@ class Feature(Base):
     item_type = Column(String(20), default="feature", index=True)  # "feature" or "bug"
     parent_bug_id = Column(Integer, nullable=True, index=True)  # For fix features, reference to parent bug
     bug_status = Column(String(20), nullable=True, index=True)  # "open", "analyzing", "fixing", "resolved"
+    review_status = Column(String(20), nullable=True, index=True)  # "needs_review"
 
     # Architectural layer for proper implementation ordering
     # 0=skeleton, 1=database, 2=backend_core, 3=auth, 4=backend_features,
@@ -74,6 +75,7 @@ class Feature(Base):
             "item_type": self.item_type,
             "parent_bug_id": self.parent_bug_id,
             "bug_status": self.bug_status,
+            "review_status": self.review_status,
             "arch_layer": self.arch_layer,
             "assigned_skills": self.assigned_skills,
             "reference_session_id": self.reference_session_id,
@@ -481,6 +483,11 @@ def _migrate_database(engine) -> None:
         # Migration 6: Add bug_status column for Bug System
         if "bug_status" not in columns:
             conn.execute(text("ALTER TABLE features ADD COLUMN bug_status VARCHAR(20)"))
+            conn.commit()
+
+        # Migration 6b: Add review_status column for spec update workflow
+        if "review_status" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN review_status VARCHAR(20)"))
             conn.commit()
 
         # Migration 7: Add arch_layer column for architectural ordering

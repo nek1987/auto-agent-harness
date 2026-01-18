@@ -116,7 +116,18 @@ Agent model:
 - Click **Unlock** to edit, choose from the dropdowns, then **Lock** to prevent accidental changes.
 - Settings are stored per project (locally) and used on the next run of each stage.
 
-### 4) Redesign with References
+### 4) Update a Spec with Large Requirements
+
+Use this when you need to merge a large requirements document into an existing project.
+
+1. Click **Update Spec** in the project header.
+2. Upload a `.md` or `.txt` file, or paste the full requirements text.
+3. Run **Analyze** to extract requirements and generate a proposed spec.
+4. Review the **Coverage** and **Diff Summary**. Coverage must be complete to continue.
+5. In **Feature Mapping**, confirm auto-matches or choose **Create new** / **Skip**.
+6. Click **Apply Update**. Features with logic changes are marked **Needs review**.
+
+### 5) Redesign with References
 
 The redesign wizard creates a plan based on visual references and then applies it via the agent.
 

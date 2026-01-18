@@ -494,7 +494,8 @@ def load_spec_manifest(project_dir: Path) -> dict:
     if not manifest_path.exists():
         return {
             "version": "1.0",
-            "specs": []
+            "specs": [],
+            "spec_versions": [],
         }
 
     try:
@@ -502,7 +503,8 @@ def load_spec_manifest(project_dir: Path) -> dict:
     except (json.JSONDecodeError, OSError):
         return {
             "version": "1.0",
-            "specs": []
+            "specs": [],
+            "spec_versions": [],
         }
 
 

@@ -72,6 +72,7 @@ export interface Feature {
   item_type: ItemType
   parent_bug_id: number | null
   bug_status: BugStatus | null
+  review_status?: 'needs_review' | null
   assigned_skills: string[] | null
 }
 
@@ -89,6 +90,54 @@ export interface FeatureCreate {
   priority?: number
   item_type?: ItemType
   assigned_skills?: string[]
+}
+
+// Spec update types
+export interface SpecUpdateCoverageItem {
+  section: string
+  chunks: number
+  requirements: number
+}
+
+export interface SpecUpdateFeatureCandidate {
+  feature_key: string
+  name: string
+  description: string
+  steps: string[]
+  category: string
+  source_anchor: string
+}
+
+export interface SpecUpdateMatchCandidate {
+  feature_id: number
+  name: string
+  confidence: number
+  change_type: 'cosmetic' | 'logic'
+}
+
+export interface SpecUpdateMatchGroup {
+  feature_key: string
+  suggested_id: number | null
+  candidates: SpecUpdateMatchCandidate[]
+}
+
+export interface SpecUpdateAnalyzeResponse {
+  analysis_id: string
+  proposed_spec: string
+  diff: { changes: { section: string; change_type: string }[]; change_count: number }
+  coverage: SpecUpdateCoverageItem[]
+  coverage_complete: boolean
+  feature_candidates: SpecUpdateFeatureCandidate[]
+  match_candidates: SpecUpdateMatchGroup[]
+  conflicts: Record<string, unknown>[]
+}
+
+export interface SpecUpdateApplyResponse {
+  version_id: string
+  updated: number
+  created: number
+  skipped: number
+  needs_review: number
 }
 
 // Agent types

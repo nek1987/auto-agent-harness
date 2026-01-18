@@ -26,7 +26,8 @@ import { AssistantFAB } from './components/AssistantFAB'
 import { AssistantPanel } from './components/AssistantPanel'
 import { ImportSpecModal } from './components/ImportSpecModal'
 import { SpecCreationChat } from './components/SpecCreationChat'
-import { Plus, Loader2, LogOut, FileQuestion, Upload, Bot } from 'lucide-react'
+import { SpecUpdateWizard } from './components/SpecUpdateWizard'
+import { Plus, Loader2, LogOut, FileQuestion, Upload, Bot, RefreshCcw } from 'lucide-react'
 import type { Feature } from './lib/types'
 
 function App() {
@@ -51,6 +52,7 @@ function App() {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [showImportSpecModal, setShowImportSpecModal] = useState(false)
   const [showSpecChat, setShowSpecChat] = useState(false)
+  const [showSpecUpdateWizard, setShowSpecUpdateWizard] = useState(false)
 
   // Check authentication on mount
   useEffect(() => {
@@ -252,6 +254,15 @@ function App() {
                     </kbd>
                   </button>
 
+                  <button
+                    onClick={() => setShowSpecUpdateWizard(true)}
+                    className="neo-btn neo-btn-secondary text-xs sm:text-sm min-h-[44px]"
+                  >
+                    <RefreshCcw size={18} />
+                    <span className="hidden sm:inline">Update Spec</span>
+                    <span className="sm:hidden">Spec</span>
+                  </button>
+
                   <AgentControl
                     projectName={selectedProject}
                     status={wsState.agentStatus}
@@ -445,6 +456,19 @@ function App() {
             onExitToProject={() => setShowSpecChat(false)}
           />
         </div>
+      )}
+
+      {showSpecUpdateWizard && selectedProject && (
+        <SpecUpdateWizard
+          isOpen={showSpecUpdateWizard}
+          projectName={selectedProject}
+          onClose={() => setShowSpecUpdateWizard(false)}
+          onApplied={() => {
+            setShowSpecUpdateWizard(false)
+            queryClient.invalidateQueries({ queryKey: ['projects'] })
+            queryClient.invalidateQueries({ queryKey: ['features', selectedProject] })
+          }}
+        />
       )}
     </div>
   )

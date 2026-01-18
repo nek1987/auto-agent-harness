@@ -18,6 +18,8 @@ import type {
   AssistantConversationDetail,
   ImportFeaturesRequest,
   ImportFeaturesResponse,
+  SpecUpdateAnalyzeResponse,
+  SpecUpdateApplyResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -183,6 +185,49 @@ export interface SpecFileStatus {
 
 export async function getSpecStatus(projectName: string): Promise<SpecFileStatus> {
   return fetchJSON(`/spec/status/${encodeURIComponent(projectName)}`)
+}
+
+// ============================================================================
+// Spec Update API
+// ============================================================================
+
+export async function analyzeSpecUpdate(
+  projectName: string,
+  inputText: string,
+  mode: 'merge' | 'rebuild' = 'merge',
+  analysisModel?: string | null
+): Promise<SpecUpdateAnalyzeResponse> {
+  return fetchJSON('/spec/update/analyze', {
+    method: 'POST',
+    body: JSON.stringify({
+      project_name: projectName,
+      input_text: inputText,
+      mode,
+      analysis_model: analysisModel ?? null,
+    }),
+  })
+}
+
+export async function applySpecUpdate(
+  projectName: string,
+  analysisId: string,
+  mapping: {
+    feature_key: string
+    action: 'update' | 'create' | 'skip'
+    existing_feature_id?: number | null
+    change_type?: 'cosmetic' | 'logic'
+  }[],
+  notes?: string
+): Promise<SpecUpdateApplyResponse> {
+  return fetchJSON('/spec/update/apply', {
+    method: 'POST',
+    body: JSON.stringify({
+      project_name: projectName,
+      analysis_id: analysisId,
+      mapping,
+      notes: notes ?? null,
+    }),
+  })
 }
 
 // ============================================================================

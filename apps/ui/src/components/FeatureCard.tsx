@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Loader2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Circle, Loader2 } from 'lucide-react'
 import type { Feature } from '../lib/types'
 
 interface FeatureCardProps {
@@ -68,6 +68,11 @@ export function FeatureCard({ feature, onClick, isInProgress }: FeatureCardProps
           <>
             <Loader2 size={16} className="animate-spin text-[var(--color-neo-progress)]" />
             <span className="text-[var(--color-neo-progress)] font-bold">Processing...</span>
+          </>
+        ) : feature.review_status === 'needs_review' ? (
+          <>
+            <AlertTriangle size={16} className="text-[var(--color-neo-warning)]" />
+            <span className="text-[var(--color-neo-warning)] font-bold">Needs review</span>
           </>
         ) : feature.passes ? (
           <>

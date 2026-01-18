@@ -98,6 +98,7 @@ def feature_to_response(f) -> FeatureResponse:
         item_type=getattr(f, 'item_type', 'feature') or 'feature',
         parent_bug_id=getattr(f, 'parent_bug_id', None),
         bug_status=getattr(f, 'bug_status', None),
+        review_status=getattr(f, 'review_status', None),
         assigned_skills=getattr(f, 'assigned_skills', None),
     )
 
