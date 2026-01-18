@@ -6,9 +6,11 @@ API endpoints for project management.
 Uses project registry for path lookups instead of fixed generations/ directory.
 """
 
-import re
 import logging
+import os
+import re
 import shutil
+import stat
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -253,7 +255,31 @@ async def delete_project(name: str, delete_files: bool = False):
     # Optionally delete files
     if delete_files and project_dir.exists():
         try:
-            shutil.rmtree(project_dir)
+            errors: list[str] = []
+
+            def _on_remove_error(func, path, exc_info):
+                err = exc_info[1]
+                if isinstance(err, FileNotFoundError):
+                    return
+                if isinstance(err, PermissionError):
+                    try:
+                        os.chmod(path, stat.S_IWRITE)
+                        func(path)
+                        return
+                    except Exception as inner:
+                        errors.append(f"{path}: {inner}")
+                        return
+                errors.append(f"{path}: {err}")
+
+            shutil.rmtree(project_dir, onerror=_on_remove_error)
+
+            if errors:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to delete some project files: " + "; ".join(errors[:5]),
+                )
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to delete project files: {e}")
 
