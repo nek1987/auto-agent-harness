@@ -252,6 +252,9 @@ async def delete_project(name: str, delete_files: bool = False):
     if lock_cleared:
         logger.info("Cleared stale agent lock for project %s", name)
 
+    files_removed = True
+    delete_warnings: list[str] = []
+
     # Optionally delete files
     if delete_files and project_dir.exists():
         try:
@@ -274,21 +277,26 @@ async def delete_project(name: str, delete_files: bool = False):
             shutil.rmtree(project_dir, onerror=_on_remove_error)
 
             if errors:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to delete some project files: " + "; ".join(errors[:5]),
-                )
-        except HTTPException:
-            raise
+                files_removed = False
+                delete_warnings = errors[:5]
+                logger.warning("Project delete warnings for %s: %s", name, "; ".join(errors))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to delete project files: {e}")
 
     # Unregister from registry
     unregister_project(name)
 
+    message = f"Project '{name}' deleted"
+    if delete_files:
+        message += " (files removed)" if files_removed else " (files partially removed)"
+    else:
+        message += " (files preserved)"
+
     return {
         "success": True,
-        "message": f"Project '{name}' deleted" + (" (files removed)" if delete_files else " (files preserved)")
+        "message": message,
+        "files_removed": files_removed,
+        "warnings": delete_warnings,
     }
 
 
