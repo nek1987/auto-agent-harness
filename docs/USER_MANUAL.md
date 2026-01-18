@@ -112,7 +112,8 @@ Agent modes:
 - YOLO: faster, skips heavy verification (good for prototypes).
 
 Agent model:
-- Open **Agent Settings** in the project view to set models for spec creation, spec analysis, coding/initializer, and redesign planning.
+- Open **Agent Settings** in the project view (collapsed by default).
+- Click **Unlock** to edit, choose from the dropdowns, then **Lock** to prevent accidental changes.
 - Settings are stored per project (locally) and used on the next run of each stage.
 
 ### 4) Redesign with References
